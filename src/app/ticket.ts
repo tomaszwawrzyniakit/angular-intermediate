@@ -7,6 +7,9 @@ export interface Ticket {
   assignee?: string;
 }
 
+// A status filter value: one of the real statuses, or "all" to skip filtering.
+export type TicketStatusFilter = 'all' | Ticket['status'];
+
 export const MOCK_TICKETS: Ticket[] = [
   {
     id: 1,

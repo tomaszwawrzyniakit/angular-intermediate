@@ -1,90 +1,58 @@
-import { Component, signal } from '@angular/core';
-import {
-  MatCard,
-  MatCardContent,
-  MatCardHeader,
-  MatCardSubtitle,
-  MatCardTitle,
-} from '@angular/material/card';
+import { Component, computed, effect, linkedSignal, signal } from '@angular/core';
+import { MatFormField, MatLabel, MatPrefix } from '@angular/material/form-field';
 import { MatIcon } from '@angular/material/icon';
-import { MOCK_TICKETS } from '../ticket';
-import { TicketStatus } from '../ticket-status/ticket-status';
+import { MatInput } from '@angular/material/input';
+import { MOCK_TICKETS, Ticket, TicketStatusFilter } from '../ticket';
+import { TicketFilter } from '../ticket-filter/ticket-filter';
+import { TicketList } from './ticket-list';
+
+const STORAGE_KEY = 'opsboard.ticket-list';
+const STATUS_FILTERS: readonly TicketStatusFilter[] = ['all', 'new', 'progress', 'done'];
 
 /**
- * The team backlog, rendered as Material cards.
+ * The tickets page. This is where the modern signal APIs come together:
  *
- * This template intentionally walks through the native control flow API:
- * @if/@else, @for/@empty, @switch/@case, @let and `track`.
+ *  - signal()        → the search text
+ *  - computed()      → the filtered list (derived, never hand-written)
+ *  - input() / output() / model() → the <app-ticket-list> and <app-ticket-filter>
+ *  - linkedSignal()  → the highlighted ticket, linked to the filtered list
+ *  - effect()        → a side-effect that mirrors search + filter to localStorage
  */
 @Component({
   selector: 'app-tickets',
-  imports: [
-    MatCard,
-    MatCardTitle,
-    MatCardSubtitle,
-    MatCardHeader,
-    MatCardContent,
-    MatIcon,
-    TicketStatus,
-  ],
+  imports: [MatFormField, MatLabel, MatInput, MatPrefix, MatIcon, TicketFilter, TicketList],
   template: `
     <h1>Tickets</h1>
-    @let count = tickets().length;
-    <p>{{ count }} ticket{{ count === 1 ? '' : 's' }} in the team backlog.</p>
 
-    @for (ticket of tickets(); track ticket.id) {
-      @let priority = ticket.priority;
-      <article class="ticket">
-        <mat-card>
-          <mat-card-header>
-            <mat-card-title>{{ ticket.title }}</mat-card-title>
-            @if (ticket.assignee) {
-              <mat-card-subtitle>{{ ticket.assignee }}</mat-card-subtitle>
-            }
-          </mat-card-header>
-          <mat-card-content>
-            <p class="description">{{ ticket.description }}</p>
-            <div class="meta">
-              <app-ticket-status [status]="ticket.status" />
-              @switch (priority) {
-                @case ('high') {
-                  <span class="priority priority--high"
-                    ><mat-icon>priority_high</mat-icon>High priority</span
-                  >
-                }
-                @case ('medium') {
-                  <span class="priority priority--medium"
-                    ><mat-icon>report_problem</mat-icon>Medium priority</span
-                  >
-                }
-                @case ('low') {
-                  <span class="priority priority--low"
-                    ><mat-icon>remove_circle_outline</mat-icon>Low priority</span
-                  >
-                }
-              }
-            </div>
-            @if (ticket.assignee) {
-              @let name = ticket.assignee;
-              <span class="assignee">
-                <span class="avatar" aria-hidden="true">{{ initials(name) }}</span>
-                <span>{{ name }}</span>
-              </span>
-            } @else {
-              <span class="assignee unassigned">
-                <mat-icon>person_outline</mat-icon>
-                Unassigned
-              </span>
-            }
-          </mat-card-content>
-        </mat-card>
-      </article>
-    } @empty {
-      <div class="empty">
-        <mat-icon>inbox</mat-icon>
-        <h2>No tickets found</h2>
-        <p>The backlog is empty. Enjoy the quiet while it lasts.</p>
-      </div>
+    <div class="controls">
+      <mat-form-field appearance="outline" subscriptSizing="fixed" class="search">
+        <mat-label>Search tickets</mat-label>
+        <mat-icon matIconPrefix>search</mat-icon>
+        <input matInput [value]="search()" (input)="onSearch($event)" />
+      </mat-form-field>
+
+      <app-ticket-filter [(filter)]="statusFilter" />
+    </div>
+
+    <p class="count" role="status">
+      Showing {{ filteredTickets().length }} of {{ tickets().length }} ticket{{
+        tickets().length === 1 ? '' : 's'
+      }}.
+    </p>
+
+    <app-ticket-list
+      [tickets]="filteredTickets()"
+      [selectedId]="selectedTicket()?.id ?? null"
+      (ticketSelected)="onTicketSelected($event)"
+    />
+
+    @if (selectedTicket()) {
+      <p class="selected" role="status">
+        <mat-icon>check_circle</mat-icon>
+        <span
+          >Selected: <strong>{{ selectedTicket()?.title }}</strong></span
+        >
+      </p>
     }
   `,
   styles: `
@@ -93,112 +61,120 @@ import { TicketStatus } from '../ticket-status/ticket-status';
       padding: 24px;
     }
 
-    .ticket {
+    .controls {
+      display: flex;
+      align-items: flex-end;
+      flex-wrap: wrap;
+      gap: 16px;
       margin-bottom: 16px;
     }
 
-    mat-card {
-      display: flex;
-      flex-direction: column;
-      height: 100%;
+    .search {
+      flex: 1 1 280px;
     }
 
-    .description {
+    .count {
       color: var(--mat-sys-on-surface-variant);
       margin: 0 0 16px;
-      font: var(--mat-sys-body-medium);
+      font: var(--mat-sys-label-large);
     }
 
-    .meta {
+    .selected {
       display: flex;
       align-items: center;
-      gap: 12px;
-      margin-bottom: 16px;
-    }
-
-    .priority {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 12px 4px 8px;
-      border-radius: 999px;
-      font: var(--mat-sys-label-large);
-      font-weight: 500;
-      mat-icon {
-        font-size: 18px;
-        width: 18px;
-        height: 18px;
-      }
-    }
-
-    .priority--high {
-      color: var(--mat-sys-on-error);
-      background-color: var(--mat-sys-error-container);
-    }
-
-    .priority--medium {
-      color: var(--mat-sys-on-tertiary);
-      background-color: var(--mat-sys-tertiary-container);
-    }
-
-    .priority--low {
-      color: var(--mat-sys-on-primary);
-      background-color: var(--mat-sys-primary-container);
-    }
-
-    .assignee {
-      display: inline-flex;
-      align-items: center;
       gap: 8px;
-      font: var(--mat-sys-label-large);
+      margin: 24px 0 0;
+      padding: 12px 16px;
+      border-radius: var(--mat-sys-corner-large);
+      background-color: var(--mat-sys-surface-container-low);
+      color: var(--mat-sys-on-surface);
       mat-icon {
-        font-size: 18px;
-        width: 18px;
-        height: 18px;
-      }
-    }
-
-    .unassigned {
-      color: var(--mat-sys-on-surface-variant);
-    }
-
-    .avatar {
-      display: inline-grid;
-      place-items: center;
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
-      background-color: var(--mat-sys-primary);
-      color: var(--mat-sys-on-primary);
-      font-size: 0.75rem;
-      font-weight: 700;
-      letter-spacing: 0.02em;
-    }
-
-    .empty {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 8px;
-      padding: 48px 0;
-      text-align: center;
-      color: var(--mat-sys-on-surface-variant);
-      mat-icon {
-        font-size: 48px;
-        width: 48px;
-        height: 48px;
+        color: var(--mat-sys-primary);
       }
     }
   `,
 })
 export class Tickets {
-  protected readonly tickets = signal(MOCK_TICKETS);
+  // // demo: signal() — the single source of truth for the search text.
+  protected readonly search = signal('');
 
-  protected initials(name: string): string {
-    return name
-      .split(' ')
-      .map((part) => part.charAt(0))
-      .join('')
-      .toUpperCase();
+  // // demo: model() target — <app-ticket-filter [(filter)]="statusFilter">
+  // // writes the user's pick back into this signal.
+  protected readonly statusFilter = signal<TicketStatusFilter>('all');
+
+  // The full backlog (source of truth for the data).
+  protected readonly tickets = signal<Ticket[]>(MOCK_TICKETS);
+
+  // // demo: computed() — derived state. Reading it re-runs only when a
+  // // dependency changes; never mutate a computed, read the source.
+  protected readonly filteredTickets = computed(() => {
+    const query = this.search().trim().toLowerCase();
+    const status = this.statusFilter();
+    return this.tickets().filter((ticket) => {
+      const matchesStatus = status === 'all' || ticket.status === status;
+      const matchesQuery =
+        query === '' ||
+        ticket.title.toLowerCase().includes(query) ||
+        ticket.description.toLowerCase().includes(query);
+      return matchesStatus && matchesQuery;
+    });
+  });
+
+  // // demo: linkedSignal() — the highlighted ticket. It defaults to the
+  // // first filtered ticket and follows that list, but a user click can
+  // // override it until the filter no longer contains that ticket.
+  // // (Two-argument form: a separate `source` and `computation`.)
+  protected readonly selectedTicket = linkedSignal<Ticket[], Ticket | null>({
+    source: this.filteredTickets,
+    computation: (tickets, previous) => {
+      const prev = previous?.value;
+      if (prev) {
+        const stillVisible = tickets.find((t) => t.id === prev.id);
+        if (stillVisible) return stillVisible;
+      }
+      return tickets[0] ?? null;
+    },
+  });
+
+  constructor() {
+    // Restore the previously persisted search + filter before the first render.
+    this.restoreFromStorage();
+
+    // // demo: effect() — a side-effect only. It watches `search` and
+    // // `statusFilter` and mirrors them into localStorage. It is NOT used
+    // // for derived state (that lives in the computed() above).
+    effect(() => {
+      const value = {
+        search: this.search(),
+        statusFilter: this.statusFilter(),
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+    });
+  }
+
+  protected onSearch(event: Event): void {
+    this.search.set((event.target as HTMLInputElement).value);
+  }
+
+  protected onTicketSelected(ticket: Ticket): void {
+    // Consume the list's output() to highlight the chosen row.
+    this.selectedTicket.set(ticket);
+  }
+
+  private restoreFromStorage(): void {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    try {
+      const saved = JSON.parse(raw) as {
+        search?: string;
+        statusFilter?: TicketStatusFilter;
+      };
+      if (typeof saved.search === 'string') this.search.set(saved.search);
+      if (typeof saved.statusFilter === 'string' && STATUS_FILTERS.includes(saved.statusFilter)) {
+        this.statusFilter.set(saved.statusFilter);
+      }
+    } catch {
+      // A corrupt value should not break the page; just ignore it.
+    }
   }
 }
