@@ -10,5 +10,9 @@ export const routes: Routes = [
     path: 'tickets',
     loadComponent: () => import('./tickets/tickets').then((m) => m.Tickets),
   },
+  {
+    path: 'tickets/new',
+    loadComponent: () => import('./tickets/new-ticket').then((m) => m.NewTicket),
+  },
   { path: '**', redirectTo: 'dashboard' },
 ];
