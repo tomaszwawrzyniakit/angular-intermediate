@@ -54,7 +54,12 @@ import { map } from 'rxjs';
         >
           <mat-nav-list>
             @for (item of navItems; track item.label) {
-              <a mat-list-item [routerLink]="item.route" routerLinkActive="active">
+              <a
+                mat-list-item
+                [routerLink]="item.route"
+                [routerLinkActive]="['active']"
+                [routerLinkActiveOptions]="{ exact: true }"
+              >
                 <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
                 <span>{{ item.label }}</span>
               </a>
