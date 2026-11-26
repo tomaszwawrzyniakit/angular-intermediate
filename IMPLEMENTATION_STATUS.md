@@ -1,6 +1,6 @@
 # Implementation Status
 
-- Last completed task: Task 06 - Resource APIs and Ticket Details
-- Next task: Task 07 - Nested Signal Form
-- Last commit: 60fb618 - feat: demonstrate Angular resource APIs
+- Last completed task: Task 07 - Nested Signal Form
+- Next task: Task 08 - Advanced Validation
+- Last commit: 496098b - feat: add nested ticket Signal Form
 - Blockers: none
