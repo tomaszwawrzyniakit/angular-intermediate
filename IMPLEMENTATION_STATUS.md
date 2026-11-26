@@ -1,6 +1,6 @@
 # Implementation Status
 
-- Last completed task: Task 08 - Advanced Validation
-- Next task: Task 09 - Angular Aria
-- Last commit: a92b157 - feat: demonstrate advanced Signal Form validation
+- Last completed task: Task 09 - Angular Aria
+- Next task: Task 10 - Dashboard and @defer
+- Last commit: 0babce7 - feat: demonstrate Angular Aria
 - Blockers: none
