@@ -1,6 +1,6 @@
 # Implementation Status
 
-- Last completed task: Task 10 - Dashboard and @defer
-- Next task: Task 11 - SSR, Hydration and Zoneless
-- Last commit: ec9b15b - feat: add deferred OpsBoard dashboard
+- Last completed task: Task 11 - SSR, Hydration and Zoneless
+- Next task: Task 12 - Focused Tests and Training Checkpoints
+- Last commit: 754b65a - feat: demonstrate SSR and hydration
 - Blockers: none
