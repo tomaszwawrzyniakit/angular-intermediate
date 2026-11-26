@@ -1,6 +1,8 @@
 import { Component, computed, effect, inject, linkedSignal, signal } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { debounceTime, distinctUntilChanged, switchMap, tap } from 'rxjs';
+import { Listbox, Option } from '@angular/aria/listbox';
+import { MatCard, MatCardContent, MatCardHeader, MatCardSubtitle, MatCardTitle } from '@angular/material/card';
 import { MatFormField, MatLabel, MatPrefix } from '@angular/material/form-field';
 import { MatIcon } from '@angular/material/icon';
 import { MatInput } from '@angular/material/input';
@@ -12,6 +14,11 @@ import { TicketList } from './ticket-list';
 
 const STORAGE_KEY = 'opsboard.ticket-list';
 const STATUS_FILTERS: readonly TicketStatusFilter[] = ['all', 'new', 'progress', 'done'];
+
+// The ops team (every known assignee in the mock backlog) for the Aria listbox.
+const AGENTS: readonly string[] = [
+  ...new Set(MOCK_TICKETS.map((t) => t.assignee).filter((name): name is string => !!name)),
+];
 
 /**
  * The tickets page. Day-1 signal APIs plus the Day-2 reactive-search pipeline:
@@ -34,6 +41,13 @@ const STATUS_FILTERS: readonly TicketStatusFilter[] = ['all', 'new', 'progress',
 @Component({
   selector: 'app-tickets',
   imports: [
+    Listbox,
+    Option,
+    MatCard,
+    MatCardTitle,
+    MatCardSubtitle,
+    MatCardHeader,
+    MatCardContent,
     MatFormField,
     MatLabel,
     MatInput,
@@ -83,6 +97,52 @@ const STATUS_FILTERS: readonly TicketStatusFilter[] = ['all', 'new', 'progress',
         >
       </p>
     }
+
+    <!--
+      ANGULAR ARIA (headless) vs ANGULAR MATERIAL (styled):
+      Material gives you pre-styled widgets (mat-select, mat-menu). Angular Aria
+      gives you *behavior* — ARIA roles, a roving tabindex, arrow/Home/End
+      keyboard navigation — and leaves the markup and styling to YOU.
+      Drive this listbox with the keyboard only: Tab in, then
+      ArrowUp/ArrowDown, Home/End, Enter to confirm a pick.
+    -->
+    <mat-card class="aria-demo">
+      <mat-card-header>
+        <mat-card-title>Angular Aria — assignee listbox</mat-card-title>
+        <mat-card-subtitle>
+          Material ships styled widgets; Angular Aria ships headless accessible
+          behavior. So this listbox is plain markup getting its ARIA roles,
+          roving tabindex and keyboard behavior from <code>&#64;angular/aria</code>.
+        </mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <span class="aria-label" id="assignee-listbox-label">
+          Assign the selected ticket to
+        </span>
+        <ul
+          ngListbox
+          selectionMode="explicit"
+          aria-labelledby="assignee-listbox-label"
+          [value]="assigneeSelection()"
+          (valueChange)="assigneeSelection.set($event)"
+          class="assignee-list"
+        >
+          @for (agent of agents; track agent) {
+            <li ngOption [value]="agent" [label]="agent" class="assignee-option">
+              {{ agent }}
+            </li>
+          }
+        </ul>
+        <p class="assignee-result" role="status">
+          @if (assignee()) {
+            Assignee: <strong>{{ assignee() }}</strong>
+          } @else {
+            No assignee picked yet — Tab into the list, then use the arrow keys
+            and Enter.
+          }
+        </p>
+      </mat-card-content>
+    </mat-card>
   `,
   styles: `
     :host {
@@ -133,6 +193,58 @@ const STATUS_FILTERS: readonly TicketStatusFilter[] = ['all', 'new', 'progress',
       color: var(--mat-sys-on-surface);
       mat-icon {
         color: var(--mat-sys-primary);
+      }
+    }
+
+    /* Angular Aria provides no styling — this tiny block is ALL the look the
+       listbox gets, which is the point: behavior from Aria, markup + style ours. */
+    .aria-demo {
+      margin-top: 24px;
+
+      code {
+        color: var(--mat-sys-primary);
+        font-size: 0.85em;
+      }
+    }
+
+    .aria-label {
+      display: block;
+      margin-bottom: 8px;
+      font: var(--mat-sys-label-large);
+      color: var(--mat-sys-on-surface-variant);
+    }
+
+    .assignee-list {
+      list-style: none;
+      margin: 0;
+      padding: 4px;
+      border: 1px solid var(--mat-sys-outline-variant);
+      border-radius: var(--mat-sys-corner-full);
+      max-height: 192px;
+      overflow: auto;
+    }
+
+    .assignee-result {
+      margin: 12px 0 0;
+      font: var(--mat-sys-label-large);
+      color: var(--mat-sys-on-surface-variant);
+
+      strong {
+        color: var(--mat-sys-on-surface);
+      }
+    }
+
+    .assignee-option {
+      padding: 8px 12px;
+      border-radius: var(--mat-sys-corner-medium);
+      cursor: pointer;
+      font: var(--mat-sys-body-medium);
+
+      /* Aria drives aria-selected / data-active / the roving tabindex; we just
+         give the focused and selected rows a visible highlight. */
+      &[aria-selected='true'],
+      &[data-active='true'] {
+        background-color: var(--mat-sys-primary-container);
       }
     }
   `,
@@ -219,6 +331,19 @@ export class Tickets {
   protected onTicketSelected(ticket: Ticket): void {
     this.selectedTicket.set(ticket);
   }
+
+  // --- Angular Aria (headless listbox) -------------------------------------
+  // The team members the listbox can pick from, derived from the mock backlog.
+  protected readonly agents = AGENTS;
+
+  // The listbox value is a MODEL input ([value] + (valueChange)): the selected
+  // agent name(s). Angular Aria owns the ARIA wiring, roving tabindex and the
+  // arrow/Home/End keyboard behavior; the little style block below is ALL the
+  // look the control gets (Material would have styled it for us).
+  protected readonly assigneeSelection = signal<string[]>([]);
+
+  // The picked agent, for the visible result line.
+  protected readonly assignee = computed(() => this.assigneeSelection()[0]);
 
   private restoreFromStorage(): void {
     const raw = localStorage.getItem(STORAGE_KEY);
