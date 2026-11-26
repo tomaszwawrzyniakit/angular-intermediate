@@ -1,10 +1,20 @@
 import { Component, signal } from '@angular/core';
+import { ɵAfterRenderManager } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Ticket } from '../ticket';
 import { TicketList } from './ticket-list';
 import { Tickets } from './tickets';
 
 const MOCK_COUNT = 10;
+
+// The search + filter restore happens in afterNextRender(), which Angular runs
+// only inside the change-detection scheduler's tick (the post-hydration path).
+// A unit-test fixture.detectChanges() does not drive that tick, so the tests
+// flush the AfterRenderManager explicitly — mirroring the real post-hydration
+// flow. (It is the ɵ-prefixed runtime export in v22.)
+function flushAfterRender(): void {
+  TestBed.inject(ɵAfterRenderManager).execute();
+}
 
 // The search is now a reactive pipeline (debounce 300 ms + simulated 500 ms
 // "network"). The tests drive it with the real clock and a short sleep, which
@@ -213,7 +223,11 @@ describe('Tickets', () => {
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
 
-    // Restored on init: the search fires and narrows the list.
+    // The persisted search + filter are restored in afterNextRender() (the
+    // browser-only, post-hydration path — see tickets.ts), not in the
+    // constructor. Flush the render callbacks to run that path, then re-render.
+    flushAfterRender();
+    fixture.detectChanges();
     expect(searchInput(host).value).toBe('email');
     await sleep(900);
     fixture.detectChanges();

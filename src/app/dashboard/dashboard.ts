@@ -9,9 +9,11 @@ import {
   MatCardTitle,
 } from '@angular/material/card';
 import { MatIcon } from '@angular/material/icon';
+import { MatSlideToggle } from '@angular/material/slide-toggle';
 import { MOCK_TICKETS } from '../ticket';
 import { TicketStatus } from '../ticket-status/ticket-status';
 import { ActivityChart } from './activity-chart';
+import { RenderInfo } from './render-info';
 
 /**
  * The ops overview — the hero demo screen.
@@ -33,14 +35,38 @@ import { ActivityChart } from './activity-chart';
     MatCardContent,
     MatButton,
     MatIcon,
+    MatSlideToggle,
     RouterLink,
     TicketStatus,
     ActivityChart,
+    RenderInfo,
   ],
   template: `
     <div class="header">
       <h1>Dashboard</h1>
       <p class="subtitle">Live overview of the ops backlog</p>
+      <div class="header-foot">
+        <!--
+          Task 11 teaching example (SSR + hydration). The component next to
+          this switch renders a new-Date value. With the switch ON it uses the
+          ANTI-PATTERN variant: a fresh new Date() is read at render time on
+          every platform, so under SSR the page paints the server's timestamp
+          and then it SHIFTS to the browser's right after hydration (Angular 22
+          reconciles a value difference into a content shift; it becomes a
+          thrown NG05xx DOM-mismatch error when the value drives un-reconcilable
+          structure or external code edits the DOM). With the switch OFF the
+          fixed version ships: a deterministic first pass plus the live time
+          applied in afterNextRender, so hydration is clean. See render-info.ts.
+        -->
+        <mat-slide-toggle
+          color="warn"
+          [checked]="demoHydrationError()"
+          (change)="demoHydrationError.set($event.checked)"
+          aria-label="Demo hydration mismatch (toggle ON and hard-reload to watch the non-deterministic time value shift after hydration)"
+          >Demo hydration mismatch</mat-slide-toggle
+        >
+        <app-render-info [broken]="demoHydrationError()" />
+      </div>
     </div>
 
     <!-- KPI cards: big number + label + icon, all computed() from the data. -->
@@ -74,7 +100,16 @@ import { ActivityChart } from './activity-chart';
           <mat-card-subtitle>Hand-rolled SVG — loaded lazily with &#64;defer</mat-card-subtitle>
         </mat-card-header>
         <mat-card-content>
-          @defer (on idle(500)) {
+          <!--
+            DAY 4 — defer + incremental hydration (Task 11).
+            The "on idle(500)" trigger drives the pure-client (CSR) path: the
+            chart's lazy chunk is fetched after the page has gone idle.
+            The "hydrate on idle(500)" trigger drives the SSR path: because a
+            hydrate trigger is present, the server renders the chart's MAIN
+            template (not the skeleton) into the HTML, and on the client that
+            dehydrated block hydrates incrementally when the browser goes idle.
+          -->
+          @defer (on idle(500); hydrate on idle(500)) {
             <app-activity-chart [tickets]="tickets()" />
           } @placeholder {
             <!-- Shown until the idle trigger + the lazy chunk are both ready. -->
@@ -133,6 +168,14 @@ import { ActivityChart } from './activity-chart';
         color: var(--mat-sys-on-surface-variant);
         font: var(--mat-sys-body-large);
       }
+    }
+
+    .header-foot {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 12px;
+      flex-wrap: wrap;
     }
 
     /* KPI cards ---------------------------------------------------------- */
@@ -275,6 +318,12 @@ import { ActivityChart } from './activity-chart';
 })
 export class Dashboard {
   protected readonly tickets = signal(MOCK_TICKETS);
+
+  // Task 11: drives the hydration teaching example (see render-info.ts).
+  // OFF = the fixed, clean-hydration build that ships. ON = the anti-pattern
+  // variant (fresh new Date() at render time) so the trainer can watch the
+  // non-deterministic value shift right after hydration under SSR.
+  protected readonly demoHydrationError = signal(false);
 
   // computed(): every KPI is derived state — nothing is stored, so the
   // numbers can never drift out of sync with the backlog.

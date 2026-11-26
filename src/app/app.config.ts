@@ -3,11 +3,13 @@ import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { provideRouter } from '@angular/router';
 import { mockTicketBackend } from './mock-http';
 import { routes } from './app.routes';
+import { provideClientHydration } from '@angular/platform-browser';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideHttpClient(withInterceptors([mockTicketBackend])),
     provideRouter(routes),
+    provideClientHydration(),
   ],
 };

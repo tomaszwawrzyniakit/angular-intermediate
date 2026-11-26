@@ -1,4 +1,14 @@
-import { Component, computed, effect, inject, linkedSignal, signal } from '@angular/core';
+import {
+  PLATFORM_ID,
+  afterNextRender,
+  Component,
+  computed,
+  effect,
+  inject,
+  linkedSignal,
+  signal,
+} from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { debounceTime, distinctUntilChanged, switchMap, tap } from 'rxjs';
 import { Listbox, Option } from '@angular/aria/listbox';
@@ -14,6 +24,12 @@ import { TicketList } from './ticket-list';
 
 const STORAGE_KEY = 'opsboard.ticket-list';
 const STATUS_FILTERS: readonly TicketStatusFilter[] = ['all', 'new', 'progress', 'done'];
+
+// The shape of what the persist effect writes to localStorage.
+interface SavedState {
+  search?: string;
+  statusFilter?: TicketStatusFilter;
+}
 
 // The ops team (every known assignee in the mock backlog) for the Aria listbox.
 const AGENTS: readonly string[] = [
@@ -311,17 +327,34 @@ export class Tickets {
   });
 
   constructor() {
-    // Restore the previously persisted search + filter before the first render.
-    this.restoreFromStorage();
+    const isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
+
+    // SSR + hydration: the first render — on the SERVER and on the client's
+    // hydration pass — must show the SAME state, or the server HTML and the
+    // client render differ and hydration errors out. So the persisted
+    // search/filter is read here (browser-only; the server has no localStorage)
+    // but NOT applied yet. Applying it in afterNextRender() — a browser-only
+    // callback that runs after the first paint, and under SSR after hydration
+    // completes — keeps the first render identical on both platforms while
+    // still restoring the user's saved state right after.
+    //
+    // Reading it up front (before the persist effect's first write) also means
+    // the effect below can never clobber the saved value before it is applied.
+    const saved = isBrowser ? this.readSavedState() : null;
+    afterNextRender(() => this.applySavedState(saved));
 
     // effect(): a side-effect only. It mirrors search + filter to localStorage.
-    effect(() => {
-      const value = {
-        search: this.search(),
-        statusFilter: this.statusFilter(),
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
-    });
+    // Registered browser-only because localStorage does not exist on the
+    // server; the effect body is a side effect, not derived state.
+    if (isBrowser) {
+      effect(() => {
+        const value = {
+          search: this.search(),
+          statusFilter: this.statusFilter(),
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+      });
+    }
   }
 
   protected onSearch(event: Event): void {
@@ -345,20 +378,28 @@ export class Tickets {
   // The picked agent, for the visible result line.
   protected readonly assignee = computed(() => this.assigneeSelection()[0]);
 
-  private restoreFromStorage(): void {
+  // Reads the persisted state (browser-only). A null value means "nothing to
+  // restore"; a corrupt value is ignored so it can never break the page.
+  private readSavedState(): SavedState | null {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
+    if (!raw) return null;
     try {
-      const saved = JSON.parse(raw) as {
-        search?: string;
-        statusFilter?: TicketStatusFilter;
-      };
-      if (typeof saved.search === 'string') this.search.set(saved.search);
-      if (typeof saved.statusFilter === 'string' && STATUS_FILTERS.includes(saved.statusFilter)) {
-        this.statusFilter.set(saved.statusFilter);
-      }
+      const saved = JSON.parse(raw) as SavedState;
+      return saved;
     } catch {
-      // A corrupt value should not break the page; just ignore it.
+      return null;
+    }
+  }
+
+  // Applies the previously-read state. Runs in afterNextRender(), i.e. in the
+  // browser and only after the first render (and, under SSR, after hydration),
+  // so the server and hydration passes are guaranteed to have rendered the
+  // identical initial state.
+  private applySavedState(saved: SavedState | null): void {
+    if (!saved) return;
+    if (typeof saved.search === 'string') this.search.set(saved.search);
+    if (typeof saved.statusFilter === 'string' && STATUS_FILTERS.includes(saved.statusFilter)) {
+      this.statusFilter.set(saved.statusFilter);
     }
   }
 }
