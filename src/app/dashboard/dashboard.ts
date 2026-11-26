@@ -1,43 +1,119 @@
 import { Component, computed, signal } from '@angular/core';
-import { MatCard, MatCardContent, MatCardTitle } from '@angular/material/card';
-import { MatChip, MatChipSet } from '@angular/material/chips';
+import { RouterLink } from '@angular/router';
+import { MatButton } from '@angular/material/button';
+import {
+  MatCard,
+  MatCardContent,
+  MatCardHeader,
+  MatCardSubtitle,
+  MatCardTitle,
+} from '@angular/material/card';
+import { MatIcon } from '@angular/material/icon';
 import { MOCK_TICKETS } from '../ticket';
+import { TicketStatus } from '../ticket-status/ticket-status';
+import { ActivityChart } from './activity-chart';
 
+/**
+ * The ops overview — the hero demo screen.
+ *
+ * KPI cards are plain computed() values over the mock backlog. The activity
+ * chart is the teaching point for DAY 4: it is wrapped in `@defer`, so its
+ * code is compiled into a separate lazy chunk that Angular fetches only
+ * after the page has gone idle (`on idle(500)`). Open DevTools → Network
+ * and reload: the chart's chunk arrives as its own request, well after the
+ * first paint.
+ */
 @Component({
   selector: 'app-dashboard',
-  imports: [MatCard, MatCardTitle, MatCardContent, MatChipSet, MatChip],
+  imports: [
+    MatCard,
+    MatCardTitle,
+    MatCardSubtitle,
+    MatCardHeader,
+    MatCardContent,
+    MatButton,
+    MatIcon,
+    RouterLink,
+    TicketStatus,
+    ActivityChart,
+  ],
   template: `
-    <h1>Dashboard</h1>
+    <div class="header">
+      <h1>Dashboard</h1>
+      <p class="subtitle">Live overview of the ops backlog</p>
+    </div>
 
-    @let total = tickets().length;
-    @let open = openTickets().length;
-    @let done = doneTickets().length;
-
+    <!-- KPI cards: big number + label + icon, all computed() from the data. -->
     <div class="kpis">
-      <mat-card>
-        <mat-card-title class="kpi-label">Total</mat-card-title>
-        <p class="kpi-value">{{ total }}</p>
+      <mat-card class="kpi kpi--open">
+        <mat-icon aria-hidden="true">pending_actions</mat-icon>
+        <p class="kpi-value">{{ openTickets().length }}</p>
+        <p class="kpi-label">Open</p>
       </mat-card>
-      <mat-card>
-        <mat-card-title class="kpi-label">Open</mat-card-title>
-        <p class="kpi-value">{{ open }}</p>
+      <mat-card class="kpi kpi--high">
+        <mat-icon aria-hidden="true">priority_high</mat-icon>
+        <p class="kpi-value">{{ highPriority().length }}</p>
+        <p class="kpi-label">High priority</p>
       </mat-card>
-      <mat-card>
-        <mat-card-title class="kpi-label">Done</mat-card-title>
-        <p class="kpi-value">{{ done }}</p>
+      <mat-card class="kpi kpi--done">
+        <mat-icon aria-hidden="true">check_circle</mat-icon>
+        <p class="kpi-value">{{ doneTickets().length }}</p>
+        <p class="kpi-label">Done</p>
+      </mat-card>
+      <mat-card class="kpi kpi--unassigned">
+        <mat-icon aria-hidden="true">person_outline</mat-icon>
+        <p class="kpi-value">{{ unassigned().length }}</p>
+        <p class="kpi-label">Unassigned</p>
       </mat-card>
     </div>
 
-    <h2>Latest tickets</h2>
-    <mat-card>
-      <mat-card-content>
-        <mat-chip-set aria-label="Sample tickets">
-          @for (ticket of tickets().slice(0, 5); track ticket.id) {
-            <mat-chip>{{ ticket.title }}</mat-chip>
+    <div class="panels">
+      <mat-card class="panel">
+        <mat-card-header>
+          <mat-card-title>Activity by status</mat-card-title>
+          <mat-card-subtitle>Hand-rolled SVG — loaded lazily with &#64;defer</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          @defer (on idle(500)) {
+            <app-activity-chart [tickets]="tickets()" />
+          } @placeholder {
+            <!-- Shown until the idle trigger + the lazy chunk are both ready. -->
+            <div class="skeleton" aria-hidden="true">
+              <div class="skeleton-bar" style="width: 70%"></div>
+              <div class="skeleton-bar" style="width: 92%"></div>
+              <div class="skeleton-bar" style="width: 45%"></div>
+            </div>
           }
-        </mat-chip-set>
-      </mat-card-content>
-    </mat-card>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card class="panel">
+        <mat-card-header>
+          <mat-card-title>Recent tickets</mat-card-title>
+          <a mat-button color="primary" class="view-all" [routerLink]="['/tickets']">View all</a>
+        </mat-card-header>
+        <mat-card-content>
+          <ul class="recent">
+            @for (ticket of recentTickets(); track ticket.id) {
+              @let assignee = ticket.assignee;
+              <li class="recent-item">
+                <a class="recent-link" [routerLink]="['/tickets', ticket.id]">
+                  {{ ticket.title }}
+                </a>
+                <span class="recent-meta">
+                  <app-ticket-status [status]="ticket.status" />
+                  @if (assignee) {
+                    <span class="assignee-name">{{ assignee }}</span>
+                  } @else {
+                    <span class="assignee-name unassigned">Unassigned</span>
+                  }
+                </span>
+              </li>
+            }
+          </ul>
+        </mat-card-content>
+      </mat-card>
+    </div>
   `,
   styles: `
     :host {
@@ -45,34 +121,176 @@ import { MOCK_TICKETS } from '../ticket';
       padding: 24px;
     }
 
+    .header {
+      margin-bottom: 24px;
+
+      h1 {
+        margin: 0;
+      }
+
+      .subtitle {
+        margin: 4px 0 0;
+        color: var(--mat-sys-on-surface-variant);
+        font: var(--mat-sys-body-large);
+      }
+    }
+
+    /* KPI cards ---------------------------------------------------------- */
     .kpis {
-      display: flex;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       gap: 16px;
     }
 
-    .kpi-label {
-      font-size: 0.875rem;
-      color: var(--mat-sys-on-surface-variant);
+    .kpi {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+
+      mat-icon {
+        font-size: 24px;
+        width: 24px;
+        height: 24px;
+      }
     }
 
     .kpi-value {
-      font-size: 2rem;
-      font-weight: 600;
-      margin: 4px 0 16px;
+      margin: 0;
+      font-size: 2.25rem;
+      font-weight: 700;
+      line-height: 1.1;
     }
 
-    h2 {
-      margin: 32px 0 16px;
+    .kpi-label {
+      margin: 0;
+      font: var(--mat-sys-label-large);
+      color: var(--mat-sys-on-surface-variant);
+    }
+
+    .kpi--open mat-icon {
+      color: var(--mat-sys-primary);
+    }
+
+    .kpi--high mat-icon {
+      color: var(--mat-sys-error);
+    }
+
+    .kpi--done mat-icon {
+      color: var(--mat-sys-secondary);
+    }
+
+    .kpi--unassigned mat-icon {
+      color: var(--mat-sys-tertiary);
+    }
+
+    /* Panels ------------------------------------------------------------- */
+    .panels {
+      display: grid;
+      grid-template-columns: 3fr 2fr;
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    @media (max-width: 900px) {
+      .panels {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .view-all {
+      margin-left: auto;
+      align-self: center;
+    }
+
+    /* Skeleton placeholder for the deferred chart. */
+    .skeleton {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      padding: 10px 0;
+    }
+
+    .skeleton-bar {
+      height: 24px;
+      border-radius: 12px;
+      background-color: var(--mat-sys-surface-container-highest);
+      animation: skeleton-pulse 1.1s ease-in-out infinite alternate;
+    }
+
+    @keyframes skeleton-pulse {
+      from {
+        opacity: 0.5;
+      }
+      to {
+        opacity: 1;
+      }
+    }
+
+    /* Recent tickets ------------------------------------------------------ */
+    .recent {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .recent-item {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px 0;
+
+      & + .recent-item {
+        border-top: 1px solid var(--mat-sys-outline-variant);
+      }
+    }
+
+    .recent-link {
+      font: var(--mat-sys-title-small);
+      text-decoration: none;
+      color: var(--mat-sys-on-surface);
+
+      &:hover {
+        text-decoration: underline;
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--mat-sys-primary);
+        outline-offset: 2px;
+        border-radius: 4px;
+      }
+    }
+
+    .recent-meta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .assignee-name {
+      font: var(--mat-sys-label-large);
+      color: var(--mat-sys-on-surface-variant);
     }
   `,
 })
 export class Dashboard {
   protected readonly tickets = signal(MOCK_TICKETS);
+
+  // computed(): every KPI is derived state — nothing is stored, so the
+  // numbers can never drift out of sync with the backlog.
   protected readonly openTickets = computed(() =>
     this.tickets().filter((t) => t.status !== 'done'),
   );
+  protected readonly highPriority = computed(() =>
+    this.tickets().filter((t) => t.priority === 'high'),
+  );
   protected readonly doneTickets = computed(() =>
     this.tickets().filter((t) => t.status === 'done'),
+  );
+  protected readonly unassigned = computed(() => this.tickets().filter((t) => !t.assignee));
+
+  // The five most recent backlog items (highest id first).
+  protected readonly recentTickets = computed(() =>
+    [...this.tickets()].sort((a, b) => b.id - a.id).slice(0, 5),
   );
 }
