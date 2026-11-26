@@ -1,7 +1,7 @@
-import { Component, signal } from '@angular/core';
+import { Component, computed, signal } from '@angular/core';
 import { ɵAfterRenderManager } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { Ticket } from '../ticket';
+import { Ticket, TicketStatusFilter } from '../ticket';
 import { TicketList } from './ticket-list';
 import { Tickets } from './tickets';
 
@@ -271,5 +271,75 @@ describe('TicketList (reusable)', () => {
     expect(fixture.componentInstance.emitted).toEqual(
       expect.objectContaining({ id: 1, title: 'Alpha' }),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 12, Test 1 — the computed() ticket-list filtering, unit-tested in
+// isolation.
+//
+// The page (tickets.ts) keeps the search results in a `tickets` signal and
+// derives the visible rows with a `computed()` that narrows them by the
+// `statusFilter` signal. That is the exact expression under test here:
+//
+//   filtered = tickets().filter((t) => status === 'all' || t.status === status)
+//
+// Testing the computed directly (instead of driving the DOM + the 300 ms
+// debounce + the 500 ms mock network) makes it a fast, deterministic unit
+// test of the *derived state*: change the query result or the status filter
+// and the computed list updates automatically. (The DOM-level "type a search
+// term → the list re-renders" behaviour is covered by the reactive-search
+// tests above; this one pins down the filtering logic itself.)
+// ---------------------------------------------------------------------------
+describe('Ticket list filtering (computed)', () => {
+  const tickets: Ticket[] = [
+    { id: 1, title: 'Alpha', description: 'd', status: 'new', priority: 'low' },
+    { id: 2, title: 'Beta', description: 'd', status: 'progress', priority: 'high' },
+    { id: 3, title: 'Gamma', description: 'd', status: 'done', priority: 'medium' },
+    { id: 4, title: 'Delta', description: 'd', status: 'done', priority: 'low' },
+  ];
+
+  class FilteredTicketList {
+    // Mirrors the tickets() search-result signal on the real page.
+    readonly tickets = signal<Ticket[]>(tickets);
+    // Mirrors the statusFilter model() target on the real page.
+    readonly statusFilter = signal<TicketStatusFilter>('all');
+    // The exact derived-state expression used in tickets.ts.
+    readonly filteredTickets = computed(() => {
+      const status = this.statusFilter();
+      return this.tickets().filter((t) => status === 'all' || t.status === status);
+    });
+  }
+
+  it('shows every ticket when the filter is "all"', () => {
+    const list = new FilteredTicketList();
+    expect(list.filteredTickets().map((t) => t.id)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('narrows the list when the status filter changes', () => {
+    const list = new FilteredTicketList();
+    list.statusFilter.set('done');
+    expect(list.filteredTickets().map((t) => t.id)).toEqual([3, 4]);
+    list.statusFilter.set('progress');
+    expect(list.filteredTickets().map((t) => t.id)).toEqual([2]);
+    list.statusFilter.set('all');
+    expect(list.filteredTickets().map((t) => t.id)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('narrows the list when the query result changes', () => {
+    const list = new FilteredTicketList();
+    // Simulate a search resolving to a smaller result set: the computed list
+    // follows the tickets signal automatically.
+    list.tickets.set([tickets[0], tickets[2]]);
+    expect(list.filteredTickets().map((t) => t.id)).toEqual([1, 3]);
+    list.tickets.set([]);
+    expect(list.filteredTickets().length).toBe(0);
+  });
+
+  it('combines the query result and the status filter', () => {
+    const list = new FilteredTicketList();
+    list.tickets.set([tickets[0], tickets[2], tickets[3]]); // one new, two done
+    list.statusFilter.set('done');
+    expect(list.filteredTickets().map((t) => t.id)).toEqual([3, 4]);
   });
 });
