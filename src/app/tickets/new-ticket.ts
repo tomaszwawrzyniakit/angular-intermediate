@@ -1,13 +1,21 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject, resource, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import {
-  FieldState,
   email,
+  FieldState,
   form,
   FormField,
   FormRoot,
+  hidden,
+  max,
+  maxLength,
   min,
+  minLength,
+  pattern,
   required,
+  validate,
+  validateAsync,
+  SchemaPathTree,
 } from '@angular/forms/signals';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import {
@@ -17,7 +25,12 @@ import {
   MatCardSubtitle,
   MatCardTitle,
 } from '@angular/material/card';
-import { MatError, MatFormField, MatLabel } from '@angular/material/form-field';
+import {
+  MatError,
+  MatFormField,
+  MatHint,
+  MatLabel,
+} from '@angular/material/form-field';
 import { MatInput } from '@angular/material/input';
 import { MatSelect, MatOption } from '@angular/material/select';
 import { MatCheckbox } from '@angular/material/checkbox';
@@ -77,8 +90,175 @@ function emptyModel(): TicketFormModel {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Advanced validation (Task 08).
+//
+// Signal Forms rules are declared in the `form()` schema. Every rule receives
+// the field *path* it applies to; custom rules additionally receive a
+// `FieldContext` whose `valueOf()` reads *any other* field — that is how
+// conditional, cross-field and business rules work.
+// ---------------------------------------------------------------------------
+
+// (basic) Title: required + length limits.
+function titleRules(m: SchemaPathTree<TicketFormModel>): void {
+  required(m.title, { message: 'Title is required.' });
+  minLength(m.title, 5, { message: 'Title must be at least 5 characters.' });
+  maxLength(m.title, 100, { message: 'Title must be at most 100 characters.' });
+}
+
+// (basic) Description: required with a minimum length.
+function descriptionRules(m: SchemaPathTree<TicketFormModel>): void {
+  required(m.description, { message: 'Description is required.' });
+  minLength(m.description, 20, {
+    message: 'Description must be at least 20 characters.',
+  });
+}
+
+// (conditional) High priority -> the description must be at least 50 characters.
+// The `when` predicate re-runs reactively: the rule is skipped when priority
+// is not "high", so it never blocks a low/medium-priority ticket.
+function highPriorityDescription(m: SchemaPathTree<TicketFormModel>): void {
+  minLength(m.description, 50, {
+    message: 'High-priority incidents need a description of at least 50 characters.',
+    when: ({ valueOf }) => valueOf(m.priority) === 'high',
+  });
+}
+
+// (basic) Contact e-mail: required + e-mail format.
+function contactEmailRules(m: SchemaPathTree<TicketFormModel>): void {
+  required(m.contact.email, { message: 'Contact e-mail is required.' });
+  email(m.contact.email, { message: 'Enter a valid e-mail address.' });
+}
+
+// (cross-field) preferredChannel == "phone" -> the phone number is required.
+// `required` accepts a `when` that reads the *other* field via `valueOf()`.
+function phoneWhenPreferred(m: SchemaPathTree<TicketFormModel>): void {
+  required(m.contact.phone, {
+    message: 'A phone number is required when "Phone" is the preferred channel.',
+    when: ({ valueOf }) => valueOf(m.contact.preferredChannel) === 'phone',
+  });
+}
+
+// (business) A large outage (service unavailable AND more than 100 affected
+// users) must be reported as high priority. The rule is attached to the
+// priority field but reads the incident fields via the field context.
+function outageRequiresHighPriority(m: SchemaPathTree<TicketFormModel>): void {
+  validate(m.priority, ({ valueOf }) =>
+    valueOf(m.incident.serviceUnavailable) &&
+    valueOf(m.incident.affectedUsers) > 100 &&
+    valueOf(m.priority) !== 'high'
+      ? {
+          kind: 'outagePriority',
+          message:
+            'Outages with more than 100 affected users must have high priority.',
+        }
+      : null,
+  );
+}
+
+// (conditional section) The workaround field only exists when the checkbox is
+// on. `hidden` marks it out of validation while hidden (so it never blocks
+// submission), and the template guards it with @if; when visible the rule
+// applies: required + at least 20 characters.
+function workaroundRules(m: SchemaPathTree<TicketFormModel>): void {
+  hidden(m.resolution.workaround, {
+    when: ({ valueOf }) => !valueOf(m.resolution.workaroundAvailable),
+  });
+  required(m.resolution.workaround, {
+    message: 'Describe the workaround.',
+    when: ({ valueOf }) => valueOf(m.resolution.workaroundAvailable),
+  });
+  minLength(m.resolution.workaround, 20, {
+    message: 'The workaround must be at least 20 characters.',
+    when: ({ valueOf }) => valueOf(m.resolution.workaroundAvailable),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// (async) One async validator: check the title against the existing mock
+// tickets. An *exact* duplicate is a blocking error; a *similar* title
+// (shared 4-letter word) is a non-blocking warning shown as a mat-hint, so
+// the trainer can point at both "pending -> error" and "hint, not error".
+// ---------------------------------------------------------------------------
+
+/** Strip punctuation and lowercase, so "Database:" and "database" compare equal. */
+function normalizeTitle(title: string): string {
+  return title.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ');
+}
+
+function wordSet(title: string): Set<string> {
+  return new Set(
+    normalizeTitle(title)
+      .split(' ')
+      .filter((w) => w.length >= 4),
+  );
+}
+
 /**
- * The `/tickets/new` page: a nested Signal Form (Angular 22).
+ * Simulates the asynchronous duplicate lookup against the mock tickets. This is
+ * the `resource()` loader: `resource` hands it a `ResourceLoaderParams` object
+ * whose `params` is the current title (or `undefined`, which keeps the resource
+ * idle). The 500 ms delay keeps the pending ("checking…") state visible in the
+ * demo; once the title becomes valid it re-runs automatically.
+ */
+function checkTitle(loaderParams: { params: { title: string } }): Promise<
+  { exactId: number | null } | undefined
+> {
+  return new Promise((resolve) =>
+    setTimeout(() => {
+      const input = loaderParams.params.title;
+      const norm = normalizeTitle(input);
+      const exact = MOCK_TICKETS.find((t) => normalizeTitle(t.title) === norm);
+      resolve({ exactId: exact?.id ?? null });
+    }, 500),
+  );
+}
+
+/**
+ * Wires the ONE async validator onto the title field: `validateAsync` builds a
+ * `resource()` that re-runs whenever the title changes. `onSuccess` maps the
+ * result to a validation error — an *exact* duplicate is the only thing that
+ * blocks; a *similar* title is not an error (the component shows it as a
+ * non-blocking warning hint instead).
+ */
+function titleDuplicateCheck(m: SchemaPathTree<TicketFormModel>): void {
+  validateAsync(m.title, {
+    params: ({ valueOf }) => ({ title: valueOf(m.title) }),
+    factory: (p) => resource({ loader: checkTitle, params: p }),
+    onSuccess: (result) =>
+      result?.exactId != null
+        ? { kind: 'duplicateTitle', message: 'This exact title already exists.' }
+        : null,
+    onError: () => null,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// (server-side) One server-side validation example: the mock "API" rejects
+// titles containing "TEST" (a staging-env rule) 700 ms after submit. The error
+// is returned from the submit `action`; Signal Forms attaches it to the
+// field referenced by `fieldTree` and the template shows it under the title.
+// ---------------------------------------------------------------------------
+
+function mockApiSave(title: string): Promise<{ kind: string; message: string } | null> {
+  return new Promise((resolve) =>
+    setTimeout(() => {
+      if (title.toUpperCase().includes('TEST')) {
+        resolve({
+          kind: 'serverRejected',
+          message:
+            'Server rejected the ticket: titles containing "TEST" are reserved for staging data.',
+        });
+      } else {
+        resolve(null);
+      }
+    }, 700),
+  );
+}
+
+/**
+ * The `/tickets/new` page: a nested Signal Form with the full advanced
+ * validation set (Task 08).
  *
  * Signal Forms teaching points demonstrated here:
  *
@@ -88,8 +268,15 @@ function emptyModel(): TicketFormModel {
  *  - nested field access   → `form.contact.email`, `form.incident.startedAt`, …
  *  - programmatic updates  → "Pre-fill from template" sets (nested) field values
  *                            from code; the Material UI follows automatically
- *  - submission            → `formRoot` + `submission.action`: it runs only when
- *                            the form is valid, `onInvalid` otherwise
+ *  - validation            → plain named rule functions: basic, conditional
+ *                            (`when`), cross-field (`valueOf` on another
+ *                            field), business (a custom `validate`), hidden
+ *                            (conditional section), one async validator
+ *                            (`validateAsync` + `resource`) and one
+ *                            server-side rule (submit `action` result)
+ *  - submission            → `formRoot` + `submission.action` runs only when
+ *                            the form is valid; returning an error object from
+ *                            the action shows a server-side error on the field
  *
  * A `Field` is a function that returns the `FieldState` for one leaf:
  * `title()` → the state, `title().value` → the (writable) value signal, and
@@ -98,8 +285,7 @@ function emptyModel(): TicketFormModel {
  * (`title().invalid()`).
  *
  * The form is grouped into four Material cards: Ticket, Contact, Incident and
- * Resolution. Only the "basic" required rules are wired up here; the advanced
- * validation set arrives in Task 08.
+ * Resolution.
  */
 @Component({
   selector: 'app-new-ticket',
@@ -113,6 +299,7 @@ function emptyModel(): TicketFormModel {
     MatCardContent,
     MatFormField,
     MatLabel,
+    MatHint,
     MatError,
     MatInput,
     MatSelect,
@@ -125,7 +312,10 @@ function emptyModel(): TicketFormModel {
     <h1>New ticket</h1>
 
     <p class="intro">
-      Fill in the incident details. Fields marked <strong>*</strong> are required.
+      Fill in the incident details. Fields marked <strong>*</strong> are
+      required. Try it: high priority needs a long description, a phone
+      channel needs a phone number, a big outage needs high priority, and the
+      mock API rejects titles containing "TEST".
     </p>
 
     <form [formRoot]="form" class="form">
@@ -140,14 +330,27 @@ function emptyModel(): TicketFormModel {
             <mat-form-field appearance="outline">
               <mat-label>Title</mat-label>
               <input matInput [formField]="title" />
-              @if (title().invalid() && title().touched()) {
+              @if (showFieldError(title())) {
                 <mat-error>{{ firstError(title()) }}</mat-error>
+              }
+              @if (duplicateWarning() && !showFieldError(title())) {
+                <mat-hint class="warning">
+                  <mat-icon>info</mat-icon>
+                  <span
+                    >Similar incident: #{{
+                      duplicateWarning()?.id
+                    }} “{{ duplicateWarning()?.title }}”</span
+                  >
+                </mat-hint>
               }
             </mat-form-field>
 
             <mat-form-field appearance="outline">
               <mat-label>Description</mat-label>
               <textarea matInput rows="3" [formField]="description"></textarea>
+              @if (showFieldError(description())) {
+                <mat-error>{{ firstError(description()) }}</mat-error>
+              }
             </mat-form-field>
 
             <mat-form-field appearance="outline">
@@ -157,6 +360,9 @@ function emptyModel(): TicketFormModel {
                 <mat-option value="medium">Medium</mat-option>
                 <mat-option value="high">High</mat-option>
               </mat-select>
+              @if (showFieldError(priority())) {
+                <mat-error>{{ firstError(priority()) }}</mat-error>
+              }
             </mat-form-field>
 
             <div class="row">
@@ -171,7 +377,7 @@ function emptyModel(): TicketFormModel {
               <mat-form-field appearance="outline">
                 <mat-label>Assignee email</mat-label>
                 <input matInput type="email" [formField]="assigneeEmail" />
-                @if (assigneeEmail().invalid() && assigneeEmail().touched()) {
+                @if (showFieldError(assigneeEmail())) {
                   <mat-error>{{ firstError(assigneeEmail()) }}</mat-error>
                 }
               </mat-form-field>
@@ -194,7 +400,7 @@ function emptyModel(): TicketFormModel {
             <mat-form-field appearance="outline">
               <mat-label>Contact email</mat-label>
               <input matInput type="email" [formField]="contactEmail" />
-              @if (contactEmail().invalid() && contactEmail().touched()) {
+              @if (showFieldError(contactEmail())) {
                 <mat-error>{{ firstError(contactEmail()) }}</mat-error>
               }
             </mat-form-field>
@@ -203,6 +409,9 @@ function emptyModel(): TicketFormModel {
               <mat-form-field appearance="outline">
                 <mat-label>Phone</mat-label>
                 <input matInput type="tel" [formField]="contactPhone" />
+                @if (showFieldError(contactPhone())) {
+                  <mat-error>{{ firstError(contactPhone()) }}</mat-error>
+                }
               </mat-form-field>
               <mat-form-field appearance="outline">
                 <mat-label>Preferred channel</mat-label>
@@ -226,6 +435,9 @@ function emptyModel(): TicketFormModel {
               <mat-form-field appearance="outline">
                 <mat-label>Affected users</mat-label>
                 <input matInput type="number" step="10" [formField]="affectedUsers" />
+                @if (showFieldError(affectedUsers())) {
+                  <mat-error>{{ firstError(affectedUsers()) }}</mat-error>
+                }
               </mat-form-field>
               <mat-form-field appearance="outline">
                 <mat-label>Started at</mat-label>
@@ -246,10 +458,13 @@ function emptyModel(): TicketFormModel {
           <mat-card-content>
             <mat-checkbox [formField]="workaroundAvailable">Workaround available</mat-checkbox>
 
-            @if (workaroundAvailable()) {
+            @if (!workaround().hidden()) {
               <mat-form-field appearance="outline">
                 <mat-label>Workaround</mat-label>
                 <textarea matInput rows="3" [formField]="workaround"></textarea>
+                @if (showFieldError(workaround())) {
+                  <mat-error>{{ firstError(workaround()) }}</mat-error>
+                }
               </mat-form-field>
             }
           </mat-card-content>
@@ -326,6 +541,15 @@ function emptyModel(): TicketFormModel {
       align-self: flex-start;
     }
 
+    /* The "similar incident" async result is a hint, not an error. */
+    .warning {
+      color: var(--mat-sys-on-surface-variant);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      width: 100%;
+    }
+
     .summary {
       display: flex;
       align-items: center;
@@ -354,24 +578,59 @@ export class NewTicket {
   // (Public so the trainer and the tests can inspect the single source of truth.)
   readonly model = signal(emptyModel());
 
-  // form(): builds the FieldTree over the model signal and applies the basic
+  // form(): builds the FieldTree over the model signal and applies the
   // validation rules. The `submission` block is what `formRoot` invokes on
   // submit: `action` runs only when the form is valid, `onInvalid` otherwise.
+  // Returning an error object from `action` is the Signal Forms way to report
+  // a server-side validation failure on a specific field (server-side rule).
   readonly form = form(
     this.model,
     (m) => {
-      required(m.title);
-      required(m.assignee.email);
+      // Basic rules
+      titleRules(m);
+      descriptionRules(m);
+      contactEmailRules(m);
+      required(m.assignee.email, { message: 'Enter a valid e-mail address.' });
       email(m.assignee.email, { message: 'Enter a valid e-mail address.' });
-      required(m.contact.email);
-      email(m.contact.email, { message: 'Enter a valid e-mail address.' });
-      min(m.incident.affectedUsers, 0);
+      min(m.incident.affectedUsers, 0, {
+        message: 'Affected users cannot be negative.',
+      });
+      max(m.incident.affectedUsers, 1_000_000, {
+        message: 'Affected users looks too large.',
+      });
+      pattern(m.contact.phone, /^[+\d][\d\s()-]{6,}$/, {
+        message: 'Enter a valid phone number.',
+      });
+
+      // Conditional rules (reactive `when` predicates)
+      highPriorityDescription(m);
+      workaroundRules(m);
+
+      // Cross-field rule (reads the preferred channel)
+      phoneWhenPreferred(m);
+
+      // Business rule (reads the incident fields)
+      outageRequiresHighPriority(m);
+
+      // The one async validator (duplicate title lookup)
+      titleDuplicateCheck(m);
     },
     {
       submission: {
-        action: async () => {
+        action: async (field) => {
           // The model signal is the source of truth, so read it directly.
           const v = this.model();
+
+          // (server-side) The mock API rejects titles containing "TEST".
+          const rejected = await mockApiSave(v.title);
+          if (rejected) {
+            // Returning the error attaches it to the title field, which the
+            // template renders under the control.
+            return { ...rejected, fieldTree: field.title };
+          }
+
+          // Persist the ticket: the model signal is the source of truth, so
+          // read it directly.
           const id = Math.max(0, ...MOCK_TICKETS.map((t) => t.id)) + 1;
           const ticket: Ticket = {
             id,
@@ -427,8 +686,42 @@ export class NewTicket {
 
   protected readonly assignees = ASSIGNEES;
 
+  /**
+   * The "similar incident" warning shown under the title. We re-derive it from
+   * the same mock data the async validator uses, only when the title is a
+   * valid candidate (>= 5 chars) and is NOT an exact duplicate (that one is a
+   * blocking error). Derived state via `computed()`, as the CLAUDE.md rules
+   * require — no `effect()`, no mutation.
+   */
+  protected readonly duplicateWarning = computed(
+    () =>
+      ((): { id: number; title: string } | null => {
+        const input = this.title().value();
+        if (input.length < 5) return null;
+        // An exact duplicate is a blocking error, not a warning.
+        const isExact = MOCK_TICKETS.some((t) => normalizeTitle(t.title) === normalizeTitle(input));
+        if (isExact) return null;
+        const words = wordSet(input);
+        for (const t of MOCK_TICKETS) {
+          if ([...wordSet(t.title)].some((w) => words.has(w))) {
+            return { id: t.id, title: t.title };
+          }
+        }
+        return null;
+      })(),
+  );
+
   protected firstError<T>(state: FieldState<T, string | number>): string {
     return state.errors()[0]?.message ?? 'This field is required.';
+  }
+
+  /**
+   * A field error is shown once the field is touched (the user edited it) or
+   * after a submit attempt (all fields are marked touched then). Hidden fields
+   * never show errors because they are out of validation anyway.
+   */
+  protected showFieldError<T>(state: FieldState<T, string | number>): boolean {
+    return state.invalid() && (state.touched() || this.submitAttempted());
   }
 
   /**
