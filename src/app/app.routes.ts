@@ -14,5 +14,9 @@ export const routes: Routes = [
     path: 'tickets/new',
     loadComponent: () => import('./tickets/new-ticket').then((m) => m.NewTicket),
   },
+  {
+    path: 'tickets/:id',
+    loadComponent: () => import('./ticket-detail').then((m) => m.TicketDetail),
+  },
   { path: '**', redirectTo: 'dashboard' },
 ];
