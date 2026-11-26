@@ -14,12 +14,8 @@ import { MatIcon } from '@angular/material/icon';
       </span>
       <span class="spacer"></span>
       <nav aria-label="Main navigation">
-        <a [routerLink]="['/dashboard']" routerLinkActive="active" class="nav-link">
-          Dashboard
-        </a>
-        <a [routerLink]="['/tickets']" routerLinkActive="active" class="nav-link">
-          Tickets
-        </a>
+        <a [routerLink]="['/dashboard']" routerLinkActive="active" class="nav-link"> Dashboard </a>
+        <a [routerLink]="['/tickets']" routerLinkActive="active" class="nav-link"> Tickets </a>
       </nav>
     </mat-toolbar>
     <router-outlet />
