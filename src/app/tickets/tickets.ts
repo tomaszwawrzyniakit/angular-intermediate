@@ -1,8 +1,12 @@
-import { Component, computed, effect, linkedSignal, signal } from '@angular/core';
+import { Component, computed, effect, inject, linkedSignal, signal } from '@angular/core';
+import { toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { debounceTime, distinctUntilChanged, switchMap, tap } from 'rxjs';
 import { MatFormField, MatLabel, MatPrefix } from '@angular/material/form-field';
 import { MatIcon } from '@angular/material/icon';
 import { MatInput } from '@angular/material/input';
+import { MatSpinner } from '@angular/material/progress-spinner';
 import { MOCK_TICKETS, Ticket, TicketStatusFilter } from '../ticket';
+import { TicketSearch } from '../ticket-search';
 import { TicketFilter } from '../ticket-filter/ticket-filter';
 import { TicketList } from './ticket-list';
 
@@ -10,17 +14,35 @@ const STORAGE_KEY = 'opsboard.ticket-list';
 const STATUS_FILTERS: readonly TicketStatusFilter[] = ['all', 'new', 'progress', 'done'];
 
 /**
- * The tickets page. This is where the modern signal APIs come together:
+ * The tickets page. Day-1 signal APIs plus the Day-2 reactive-search pipeline:
  *
- *  - signal()        → the search text
- *  - computed()      → the filtered list (derived, never hand-written)
- *  - input() / output() / model() → the <app-ticket-list> and <app-ticket-filter>
- *  - linkedSignal()  → the highlighted ticket, linked to the filtered list
- *  - effect()        → a side-effect that mirrors search + filter to localStorage
+ *  - signal()               → the search text
+ *  - toObservable()         → the text as a stream of its changes (signal → RxJS)
+ *  - debounceTime()         → wait 300 ms until typing pauses
+ *  - distinctUntilChanged() → ignore repeats of the same term
+ *  - switchMap()            → one search per term; a new term cancels the previous request
+ *  - toSignal()             → the latest result back as a signal (RxJS → signal)
+ *
+ * The teaching point: Signals hold state; RxJS owns the asynchronous bits —
+ * the timer (debounce) and the cancellation of a stale, in-flight search.
+ *
+ * The pipeline is subscribed to exactly once (through toSignal). Everything the
+ * UI needs — the list and the "is a search in flight?" flag — is derived from
+ * that single subscription, so there is no second subscription to re-run the
+ * (cold) debounce/switchMap chain.
  */
 @Component({
   selector: 'app-tickets',
-  imports: [MatFormField, MatLabel, MatInput, MatPrefix, MatIcon, TicketFilter, TicketList],
+  imports: [
+    MatFormField,
+    MatLabel,
+    MatInput,
+    MatPrefix,
+    MatIcon,
+    MatSpinner,
+    TicketFilter,
+    TicketList,
+  ],
   template: `
     <h1>Tickets</h1>
 
@@ -34,17 +56,24 @@ const STATUS_FILTERS: readonly TicketStatusFilter[] = ['all', 'new', 'progress',
       <app-ticket-filter [(filter)]="statusFilter" />
     </div>
 
-    <p class="count" role="status">
-      Showing {{ filteredTickets().length }} of {{ tickets().length }} ticket{{
-        tickets().length === 1 ? '' : 's'
-      }}.
-    </p>
+    @if (searching()) {
+      <div class="pending" role="status" aria-busy="true">
+        <mat-spinner diameter="48" aria-label="Searching tickets"></mat-spinner>
+        <p>Searching tickets…</p>
+      </div>
+    } @else {
+      <p class="count" role="status">
+        Showing {{ filteredTickets().length }} of {{ tickets().length }} ticket{{
+          tickets().length === 1 ? '' : 's'
+        }}.
+      </p>
 
-    <app-ticket-list
-      [tickets]="filteredTickets()"
-      [selectedId]="selectedTicket()?.id ?? null"
-      (ticketSelected)="onTicketSelected($event)"
-    />
+      <app-ticket-list
+        [tickets]="filteredTickets()"
+        [selectedId]="selectedTicket()?.id ?? null"
+        (ticketSelected)="onTicketSelected($event)"
+      />
+    }
 
     @if (selectedTicket()) {
       <p class="selected" role="status">
@@ -79,6 +108,20 @@ const STATUS_FILTERS: readonly TicketStatusFilter[] = ['all', 'new', 'progress',
       font: var(--mat-sys-label-large);
     }
 
+    /* Visible pending state while a search is in flight. */
+    .pending {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding: 48px 0;
+      color: var(--mat-sys-on-surface-variant);
+      font: var(--mat-sys-label-large);
+      p {
+        margin: 0;
+      }
+    }
+
     .selected {
       display: flex;
       align-items: center;
@@ -95,35 +138,54 @@ const STATUS_FILTERS: readonly TicketStatusFilter[] = ['all', 'new', 'progress',
   `,
 })
 export class Tickets {
-  // // demo: signal() — the single source of truth for the search text.
+  private readonly ticketSearch = inject(TicketSearch);
+
+  // signal(): the single source of truth for the search text.
   protected readonly search = signal('');
 
-  // // demo: model() target — <app-ticket-filter [(filter)]="statusFilter">
-  // // writes the user's pick back into this signal.
+  // model() target: <app-ticket-filter [(filter)]="statusFilter"> writes the
+  // user's pick back into this signal.
   protected readonly statusFilter = signal<TicketStatusFilter>('all');
 
-  // The full backlog (source of truth for the data).
-  protected readonly tickets = signal<Ticket[]>(MOCK_TICKETS);
+  // A flag that is true while a search is in flight, so the template can show
+  // a spinner. It is driven by the single pipeline subscription below.
+  protected readonly searching = signal(false);
 
-  // // demo: computed() — derived state. Reading it re-runs only when a
-  // // dependency changes; never mutate a computed, read the source.
+  // toObservable(): the search signal as a stream of its changes. Field
+  // initializers run in an injection context, so this is allowed.
+  private readonly searchChanges$ = toObservable(this.search);
+
+  // RxJS owns the asynchronous parts: debounce the typing, drop repeats, then
+  // run one search per term and CANCEL the previous (stale) request when a new
+  // term arrives (switchMap). Setting the flag inside the switchMap means the
+  // spinner appears exactly when a fresh request is about to go out; the outer
+  // `tap` clears it once the latest request has answered.
+  private readonly searchResults$ = this.searchChanges$.pipe(
+    debounceTime(300),
+    distinctUntilChanged(),
+    switchMap((term) => {
+      this.searching.set(true);
+      return this.ticketSearch.search(term);
+    }),
+    tap({
+      next: () => this.searching.set(false),
+    }),
+  );
+
+  // toSignal(): the latest search results back as a signal. It starts with the
+  // full backlog and only flips to a new list once a search resolves. This is
+  // the single subscription that drives the whole reactive UI.
+  protected readonly tickets = toSignal(this.searchResults$, { initialValue: MOCK_TICKETS });
+
+  // computed(): derived state — the search results narrowed by the status filter.
   protected readonly filteredTickets = computed(() => {
-    const query = this.search().trim().toLowerCase();
     const status = this.statusFilter();
-    return this.tickets().filter((ticket) => {
-      const matchesStatus = status === 'all' || ticket.status === status;
-      const matchesQuery =
-        query === '' ||
-        ticket.title.toLowerCase().includes(query) ||
-        ticket.description.toLowerCase().includes(query);
-      return matchesStatus && matchesQuery;
-    });
+    return this.tickets().filter((ticket) => status === 'all' || ticket.status === status);
   });
 
-  // // demo: linkedSignal() — the highlighted ticket. It defaults to the
-  // // first filtered ticket and follows that list, but a user click can
-  // // override it until the filter no longer contains that ticket.
-  // // (Two-argument form: a separate `source` and `computation`.)
+  // linkedSignal(): the highlighted ticket. It defaults to the first visible
+  // ticket and follows the filtered list, but a user click overrides it until
+  // the filter no longer contains that ticket.
   protected readonly selectedTicket = linkedSignal<Ticket[], Ticket | null>({
     source: this.filteredTickets,
     computation: (tickets, previous) => {
@@ -140,9 +202,7 @@ export class Tickets {
     // Restore the previously persisted search + filter before the first render.
     this.restoreFromStorage();
 
-    // // demo: effect() — a side-effect only. It watches `search` and
-    // // `statusFilter` and mirrors them into localStorage. It is NOT used
-    // // for derived state (that lives in the computed() above).
+    // effect(): a side-effect only. It mirrors search + filter to localStorage.
     effect(() => {
       const value = {
         search: this.search(),
@@ -157,7 +217,6 @@ export class Tickets {
   }
 
   protected onTicketSelected(ticket: Ticket): void {
-    // Consume the list's output() to highlight the chosen row.
     this.selectedTicket.set(ticket);
   }
 
