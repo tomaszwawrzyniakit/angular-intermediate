@@ -161,6 +161,61 @@ body {
   line-height: 1.1;
 }
 
+// KPI icon color variants (task 10): tinted circle + icon color per KPI.
+.kpi-open {
+  background: rgba(34, 211, 238, 0.12);
+  color: var(--ops-accent);
+}
+
+.kpi-high {
+  background: rgba(248, 113, 113, 0.14);
+  color: #f87171;
+}
+
+.kpi-done {
+  background: rgba(74, 222, 128, 0.14);
+  color: #4ade80;
+}
+
+.kpi-unassigned {
+  background: rgba(251, 191, 36, 0.14);
+  color: #fbbf24;
+}
+
+.text-accent {
+  color: var(--ops-accent);
+}
+
+// Activity chart bar fills (task 10) — non-text UI colors: each passes WCAG 1.4.11
+// (>= 3:1) against the 6% white bar track on the dark surface.
+.bar-new {
+  background: var(--ops-accent);
+}
+
+.bar-progress {
+  background: #38bdf8;
+}
+
+.bar-done {
+  background: #4ade80;
+}
+
+// Bootstrap-only loading skeleton for the deferred chart (no extra keyframes).
+.skeleton {
+  background: rgba(255, 255, 255, 0.08);
+  animation: skeleton-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
 // Accessible focus ring (WCAG 2.4.7) — clear visible outline.
 :focus-visible {
   outline: 2px solid var(--ops-accent);
