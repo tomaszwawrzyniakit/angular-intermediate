@@ -195,3 +195,39 @@ body {
 .nav-links .is-active .bi {
   color: var(--ops-accent);
 }
+
+// Assignee picker (Angular Aria listbox): plain list-group restyled for the theme.
+.assignee-listbox {
+  --bs-list-group-bg: transparent;
+  --bs-list-group-border-color: var(--ops-border);
+  overflow: hidden;
+}
+
+.assignee-listbox .list-group-item {
+  background: transparent;
+  border-color: transparent;
+  cursor: pointer;
+}
+
+// Smaller avatar for the compact picker rows.
+.avatar-sm {
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 0.65rem;
+}
+
+// The Aria directive sets [data-active] on the active (roving-tabindex) option
+// and [aria-selected] on the chosen one — we style them, no Angular classes needed.
+.assignee-listbox .list-group-item[data-active='true'] {
+  background: var(--ops-surface-2);
+}
+
+.assignee-listbox .list-group-item[aria-selected='true'] {
+  background: rgba(34, 211, 238, 0.12);
+  color: var(--ops-accent-soft);
+  font-weight: 600;
+}
+
+.assignee-listbox .list-group-item[aria-selected='true'] .bi-check2-fill {
+  color: var(--ops-accent);
+}

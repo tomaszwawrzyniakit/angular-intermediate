@@ -5,6 +5,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 
 import { Ticket } from '../../domain/ticket';
 import { MOCK_TICKETS } from '../../domain/tickets';
+import { AssigneePicker } from './assignee-picker';
 import { TicketStatus } from './ticket-status';
 
 /** Simulated round-trip for the plain `resource()` side-panel loader. */
@@ -12,7 +13,7 @@ const RELATED_TICKETS_LATENCY_MS = 250;
 
 @Component({
   selector: 'app-ticket-detail',
-  imports: [RouterLink, TicketStatus],
+  imports: [RouterLink, TicketStatus, AssigneePicker],
   template: `
     <nav aria-label="Breadcrumb">
       <ol class="breadcrumb">
@@ -99,8 +100,9 @@ const RELATED_TICKETS_LATENCY_MS = 250;
         HTTP stack. The abort signal makes the stale load cancellable when the id
         changes — the same behaviour httpResource provides around HttpClient.
       -->
-      <div class="col-12 col-lg-4">
-        <div class="card border-0 shadow-sm h-100">
+      <!-- Right rail: related tickets + the Angular Aria assignee picker. -->
+      <div class="col-12 col-lg-4 d-flex flex-column gap-4">
+        <div class="card border-0 shadow-sm">
           <div class="card-header bg-transparent d-flex align-items-center gap-2">
             <i class="bi bi-diagram-3" aria-hidden="true"></i>
             <h2 class="h6 mb-0">Related open tickets</h2>
@@ -123,6 +125,21 @@ const RELATED_TICKETS_LATENCY_MS = 250;
               }
             </ul>
           }
+        </div>
+
+        <!--
+          Task 09 — Angular Aria: headless accessible listbox behaviour on our own
+          Bootstrap markup (assignee picker). See assignee-picker.ts for the
+          Material-vs-Aria contrast and the keyboard model.
+        -->
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-transparent d-flex align-items-center gap-2">
+            <i class="bi bi-person-check" aria-hidden="true"></i>
+            <h2 class="h6 mb-0">Assignee</h2>
+          </div>
+          <div class="card-body pt-3">
+            <app-assignee-picker />
+          </div>
         </div>
       </div>
     </div>
