@@ -9,3 +9,6 @@ export interface Ticket {
   priority: TicketPriority;
   assignee?: string;
 }
+
+/** The on-call team – the people a ticket can be assigned to. */
+export const TEAM = ['Marta Kowalska', 'Tomasz Nowak', 'Anna Wiśniewska', 'Piotr Zieliński'];
