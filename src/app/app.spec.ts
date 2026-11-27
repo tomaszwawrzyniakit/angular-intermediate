@@ -4,10 +4,13 @@ import { provideRouter } from '@angular/router';
 import { App } from './app';
 
 describe('App', () => {
-  it('renders the OpsBoard brand', async () => {
+  it('renders the navigation', async () => {
     TestBed.configureTestingModule({ providers: [provideRouter([])] });
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
-    expect(fixture.nativeElement.textContent).toContain('OpsBoard');
+    const links = [...fixture.nativeElement.querySelectorAll('.nav-link')].map((a: Element) =>
+      a.textContent?.trim(),
+    );
+    expect(links).toEqual(['Dashboard', 'Tickets', 'New ticket']);
   });
 });
