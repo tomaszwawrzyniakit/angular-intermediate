@@ -1,6 +1,6 @@
 # OpsBoard Implementation Status
 
-- Last completed task: Task 04 — Modern signal APIs (signal/computed/input/output/model/linkedSignal/effect on the Bootstrap ticket list)
-- Next task: Task 05 — Reactive HTTP search (signal → toObservable → RxJS → HTTP → toSignal live search)
-- Last commit: 8921b27 feat: demonstrate modern signal APIs
+- Last completed task: Task 05 — Reactive HTTP search (signal → toObservable → debounceTime → distinctUntilChanged → switchMap → HTTP → toSignal cancellable live ticket search with a mock backend)
+- Next task: Task 06 — Resource APIs and Ticket Details (`/tickets/:id` with `resource()` / `httpResource()`)
+- Last commit: e6d1954 feat: add cancellable reactive ticket search
 - Blockers: none
