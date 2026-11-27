@@ -3,6 +3,7 @@ import { RouterLink } from '@angular/router';
 import { Ticket } from '../../domain/ticket';
 import { MOCK_TICKETS } from '../../domain/tickets';
 import { ActivityChart } from './activity-chart';
+import { RenderedAt } from './rendered-at';
 
 /**
  * Task 10 — the OpsBoard dashboard: the hero demo screen.
@@ -14,6 +15,13 @@ import { ActivityChart } from './activity-chart';
  *   the browser fetches after first render (visible in DevTools > Network).
  * - `@placeholder` (skeleton) + `@loading` (spinner) + `@error` cover the
  *   deferrable-view lifecycle stages.
+ * - Task 11 — SSR: the `hydrate on idle(1200)` trigger makes this the
+ *   INCREMENTAL-HYDRATION demo: the server renders the chart's main template
+ *   directly (not the placeholder), the client keeps it dehydrated until the
+ *   idle trigger fires, and the lazy chunk loads then — the KPI cards stay
+ *   interactive while the chart hydrates on its own.
+ * - Task 11 — the `<app-rendered-at>` badge is the controlled hydration
+ *   mismatch teaching example (see rendered-at.ts for the wrong-vs-fixed code).
  */
 @Component({
   selector: 'app-dashboard',
@@ -25,9 +33,13 @@ import { ActivityChart } from './activity-chart';
           Live ticket counts, computed from the mock ticket feed.
         </p>
       </div>
-      <a class="btn btn-primary btn-sm" [routerLink]="['/tickets']">
-        <i class="bi bi-grid-1x2 me-2"></i>Ticket list
-      </a>
+      <div class="d-flex align-items-center gap-2">
+        <!-- Task 11: SSR/hydration teaching example (see rendered-at.ts). -->
+        <app-rendered-at />
+        <a class="btn btn-primary btn-sm" [routerLink]="['/tickets']">
+          <i class="bi bi-grid-1x2 me-2"></i>Ticket list
+        </a>
+      </div>
     </div>
 
     <!-- KPI cards: computed() derives each count from MOCK_TICKETS. -->
@@ -54,10 +66,16 @@ import { ActivityChart } from './activity-chart';
     </div>
 
     <!--
-      Deferrable view (the ONE chart on this page). The "on idle" trigger waits
-      for the browser to be idle (1200 ms hard cap) BEFORE fetching the lazy
-      chunk, so the KPI cards paint first and the chart's own JS request shows
-      up separately in DevTools > Network.
+      Deferrable view (the ONE chart on this page).
+      - on idle(1200): wait for the browser to be idle (1200 ms hard cap)
+        BEFORE fetching the lazy chunk, so the KPI cards paint first and the
+        chart's own JS request shows up separately in DevTools > Network.
+      - hydrate on idle(1200) (Task 11, initial SSR load only): with
+        incremental hydration enabled, the server renders the chart's MAIN
+        template (not the placeholder) into the HTML; the client keeps it
+        dehydrated until this trigger fires, then loads the lazy chunk and
+        hydrates it — the KPI cards stay interactive the whole time. Subsequent
+        client-side navigations still use the plain on idle trigger.
     -->
     <div class="card border-0 shadow-sm">
       <div class="card-header bg-transparent d-flex align-items-center gap-2">
@@ -65,7 +83,7 @@ import { ActivityChart } from './activity-chart';
         <h2 class="h5 mb-0">Ticket activity by status</h2>
       </div>
       <div class="card-body">
-        @defer (on idle(1200)) {
+        @defer (on idle(1200); hydrate on idle(1200)) {
           <app-activity-chart />
         } @loading (after 300ms) {
           <div class="d-flex align-items-center gap-3 text-secondary py-4" role="status">
@@ -99,7 +117,7 @@ import { ActivityChart } from './activity-chart';
       </div>
     </div>
   `,
-  imports: [RouterLink, ActivityChart],
+  imports: [RouterLink, ActivityChart, RenderedAt],
 })
 export class Dashboard {
   private readonly count = (predicate: (t: Ticket) => boolean) =>

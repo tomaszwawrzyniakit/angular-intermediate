@@ -1,3 +1,4 @@
+import { isPlatformBrowser } from '@angular/common';
 import {
   Component,
   computed,
@@ -5,6 +6,7 @@ import {
   inject,
   linkedSignal,
   output,
+  PLATFORM_ID,
   signal,
 } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
@@ -170,6 +172,9 @@ export class Tickets {
   /** Navigates to the lazy detail route on row selection (Task 06). */
   private readonly router = inject(Router);
 
+  /** Task 11 — `localStorage` only exists in the browser, never on the server. */
+  private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
+
   // demo: signal() — the raw search text and the status filter are plain local state signals.
   readonly search = signal('');
   readonly statusFilter = signal<TicketFilterValue>('all');
@@ -257,19 +262,30 @@ export class Tickets {
   });
 
   constructor() {
-    // Restore the persisted search/filter state once, before the effect runs.
-    this.search.set(localStorage.getItem(SEARCH_STORAGE_KEY) ?? '');
-    const restored = localStorage.getItem(FILTER_STORAGE_KEY) as TicketFilterValue | null;
-    this.statusFilter.set(
-      restored === 'all' || restored === 'new' || restored === 'progress' || restored === 'done'
-        ? restored
-        : 'all',
-    );
+    // Task 11 — `localStorage` is browser-only: it does not exist during SSR,
+    // so the server always renders the pristine default state. Restoring the
+    // saved value here is a plain signal write that runs AFTER hydration has
+    // claimed the DOM — a value update, not a *structural* change, so it cannot
+    // cause a hydration mismatch (only differing DOM structure can). This keeps
+    // server and client markup identical, which is what hydration requires.
+    if (this.isBrowser) {
+      // Restore the persisted search/filter state once, before the effect runs.
+      this.search.set(localStorage.getItem(SEARCH_STORAGE_KEY) ?? '');
+      const restored = localStorage.getItem(FILTER_STORAGE_KEY) as TicketFilterValue | null;
+      this.statusFilter.set(
+        restored === 'all' || restored === 'new' || restored === 'progress' || restored === 'done'
+          ? restored
+          : 'all',
+      );
+    }
 
-    // demo: effect() — side effect only: mirror search/filter into localStorage on change.
+    // demo: effect() — side effect only: mirror search/filter into localStorage
+    // on change (browser-only — see the SSR note above).
     effect(() => {
-      localStorage.setItem(SEARCH_STORAGE_KEY, this.search());
-      localStorage.setItem(FILTER_STORAGE_KEY, this.statusFilter());
+      if (this.isBrowser) {
+        localStorage.setItem(SEARCH_STORAGE_KEY, this.search());
+        localStorage.setItem(FILTER_STORAGE_KEY, this.statusFilter());
+      }
     });
   }
 
