@@ -84,16 +84,31 @@ body {
   --bs-list-group-border-color: var(--ops-border);
 }
 
-// Ticket rows: keep the link text in the body color, highlight on hover.
+// Ticket rows: body text color, highlight on hover.
 .ticket-row {
-  a {
-    color: inherit;
-    text-decoration: none;
-  }
-
   &:hover {
     background-color: var(--ops-surface-2) !important;
   }
+}
+
+// Ticket rows are real <button>s (accessible + keyboard operable) — reset the
+// default button look so the row content reads as a list item.
+.ticket-select {
+  flex-grow: 1;
+  min-width: 0;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+// Search input with a left-placed search icon.
+.input-icon {
+  padding-inline-start: 2.25rem;
 }
 
 // Assignee initials avatar circle.
