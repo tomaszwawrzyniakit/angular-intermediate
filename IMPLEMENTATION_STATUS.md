@@ -1,6 +1,6 @@
 # OpsBoard Implementation Status
 
-- Last completed task: Task 02 — Application shell (Bootstrap navbar with hamburger toggle, left sidebar list-group nav with routerLinkActive, /tickets/new placeholder route, minimal custom SCSS)
-- Next task: Task 03 — Modern ticket list (Bootstrap ticket list with @if/@else/@for/@empty/@switch/@let + track, reusable status component)
-- Last commit: ca1672b feat: add OpsBoard Bootstrap application shell
+- Last completed task: Task 03 — Modern ticket list (Bootstrap ticket list with @if/@else/@for/@empty/@switch/@case/@let + track, reusable ticket-status badge component)
+- Next task: Task 04 — Modern Signal APIs (signal/computed/input/output/model/linkedSignal/effect on the ticket list)
+- Last commit: 7d43c76 feat: add modern ticket list
 - Blockers: none
