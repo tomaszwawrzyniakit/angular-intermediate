@@ -107,6 +107,18 @@ export const ticketDraftSchema = schema<TicketDraft>((t) => {
   minLength(t.impact.workaround, 20, { message: 'At least 20 characters.' });
 });
 
+// Signal Forms GOTCHAS (worth showing live):
+//  - Every field needs an initial value in the model ('' / 0 / false / null, never a missing key):
+//    the FieldTree is built from the model's shape.
+//  - While an async rule runs, pending() is true and BOTH valid() and invalid() are false.
+//    Use valid() to allow "Next"/"Save", invalid() to show errors (see new-ticket.ts).
+//  - Async rules (validateHttp/validateAsync) run only after all sync rules of the field pass.
+//  - hidden()/disabled()/readonly() fields are skipped by validation, but their values STAY in
+//    form().value() – strip them before sending (here the workaround text is kept on purpose).
+//  - `when` switches a single rule; applyWhen() switches a whole sub-schema.
+//  - Errors from validateTree()/submission may target another field: { fieldTree: t.x, ... }.
+//  - reset() clears touched/dirty; reset(value) also replaces the value.
+
 // Complex forms: a sub-schema can be reused for every object of the same shape, e.g.
 //   const contactSchema = schema<Contact>((c) => { required(c.name); email(c.email); });
 //   apply(t.reporter, contactSchema);

@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { form, FormField, FormRoot } from '@angular/forms/signals';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -42,6 +42,8 @@ const STEPS = ['Problem', 'Reporter', 'Impact', 'Review'] as const;
       <div class="card-body">
         @switch (step()) {
           @case (0) {
+            <!-- [formField] takes the FIELD (form.basics.title), the state is form.basics.title().
+                 Do not mix it with [value]/(input)/ngModel on the same control. -->
             <div class="mb-3">
               <label class="form-label" for="title">Title</label>
               <input id="title" class="form-control" [formField]="form.basics.title" />
@@ -202,7 +204,15 @@ const STEPS = ['Problem', 'Reporter', 'Impact', 'Review'] as const;
           </button>
         }
         @if (step() < steps.length - 1) {
-          <button type="button" class="btn btn-primary ms-auto" (click)="next()">Next</button>
+          <!-- pending = an async rule (duplicate title) is still running: valid() is false then -->
+          <button
+            type="button"
+            class="btn btn-primary ms-auto"
+            [disabled]="currentStep()().pending()"
+            (click)="next()"
+          >
+            Next
+          </button>
         } @else {
           <button type="submit" class="btn btn-success ms-auto" [disabled]="form().submitting()">
             @if (form().submitting()) {
@@ -234,6 +244,7 @@ export default class NewTicket {
         try {
           const ticket = await firstValueFrom(this.api.create(basics));
           this.store.added(ticket);
+          this.saved.set(true); // let the canDeactivate guard pass
           await this.router.navigate(['/tickets', ticket.id]);
           return undefined;
         } catch (e) {
@@ -250,9 +261,23 @@ export default class NewTicket {
     },
   });
 
-  /** Multi-step: only move on when the current step's sub-form is valid. */
+  private readonly saved = signal(false);
+
+  /** Read by the canDeactivate guard in tickets.routes.ts. dirty() = the user changed something. */
+  readonly hasUnsavedChanges = computed(() => this.form().dirty() && !this.saved());
+
+  /** The sub-form (FieldTree) of the current step; the Review step has none. */
+  protected readonly currentStep = computed(
+    () => [this.form.basics, this.form.reporter, this.form.impact, this.form][this.step()],
+  );
+
+  /**
+   * Multi-step: only move on when the current step's sub-form is valid.
+   * (submit() also marks fields touched, but fields of steps that are not rendered would show
+   * nothing – so every step is checked before the user can leave it.)
+   */
   protected next(): void {
-    const current = [this.form.basics, this.form.reporter, this.form.impact][this.step()];
+    const current = this.currentStep();
     current().markAsTouched(); // show all errors of this step
     if (current().valid()) {
       this.step.update((s) => s + 1);
