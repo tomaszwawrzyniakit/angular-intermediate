@@ -15,6 +15,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/tickets/tickets').then((m) => m.Tickets),
   },
   {
+    // Placeholder only; the real Signal Forms form arrives in Task 07.
+    path: 'tickets/new',
+    loadComponent: () => import('./features/tickets/new-ticket').then((m) => m.NewTicket),
+  },
+  {
     path: '**',
     redirectTo: 'dashboard',
   },

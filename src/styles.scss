@@ -128,3 +128,26 @@ body {
 .ticket-id {
   min-width: 2.75rem;
 }
+
+// Left sidebar navigation (collapsed on mobile via Bootstrap collapse + `show`).
+.nav-links {
+  background: var(--ops-surface);
+  border: 1px solid var(--ops-border);
+  border-radius: 0.75rem;
+}
+
+.nav-links .list-group-item {
+  background: transparent;
+  border-color: transparent;
+}
+
+// Active nav link: cyan-tinted surface + accent text (WCAG AA on dark bg).
+.nav-links .is-active {
+  background: rgba(34, 211, 238, 0.12) !important;
+  color: var(--ops-accent-soft) !important;
+  font-weight: 600;
+}
+
+.nav-links .is-active .bi {
+  color: var(--ops-accent);
+}

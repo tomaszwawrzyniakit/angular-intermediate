@@ -17,10 +17,17 @@ describe('App', () => {
     expect(app).toBeTruthy();
   });
 
-  it('should render the OpsBoard navbar brand', async () => {
+  it('should render the OpsBoard navbar brand', () => {
     const fixture = TestBed.createComponent(App);
-    await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('.navbar-brand')?.textContent).toContain('OpsBoard');
+  });
+
+  it('should render the sidebar navigation links', async () => {
+    const fixture = TestBed.createComponent(App);
+    await fixture.whenStable();
+    const nav = fixture.nativeElement.querySelector('[aria-label="Sections"]') as HTMLElement;
+    const links = Array.from(nav.querySelectorAll('a')).map((a) => a.textContent?.trim());
+    expect(links).toEqual(['Dashboard', 'Tickets', 'New Ticket']);
   });
 });
