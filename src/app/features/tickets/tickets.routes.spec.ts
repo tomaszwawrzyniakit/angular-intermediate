@@ -10,10 +10,10 @@ describe('tickets routes', () => {
     });
     const router = TestBed.inject(Router);
 
-    await router.navigateByUrl('/tickets/new');
-    expect(router.routerState.snapshot.root.firstChild?.firstChild?.routeConfig?.path).toBe('new');
-
     await router.navigateByUrl('/tickets/42');
     expect(router.routerState.snapshot.root.firstChild?.firstChild?.routeConfig?.path).toBe(':id');
+
+    await router.navigateByUrl('/tickets/new');
+    expect(router.routerState.snapshot.root.firstChild?.firstChild?.routeConfig?.path).toBe('new');
   });
 });
