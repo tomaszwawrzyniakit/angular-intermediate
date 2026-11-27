@@ -1,6 +1,6 @@
 # OpsBoard Implementation Status
 
-- Last completed task: Task 05 — Reactive HTTP search (signal → toObservable → debounceTime → distinctUntilChanged → switchMap → HTTP → toSignal cancellable live ticket search with a mock backend)
-- Next task: Task 06 — Resource APIs and Ticket Details (`/tickets/:id` with `resource()` / `httpResource()`)
-- Last commit: e6d1954 feat: add cancellable reactive ticket search
+- Last completed task: 06 — Resource APIs + ticket detail (`/tickets/:id` lazy route with `httpResource()` and a plain `resource()` example)
+- Next task: 07 — Nested Signal Form (`/tickets/new`)
+- Last commit: b4df00c feat: demonstrate Angular resource APIs
 - Blockers: none
