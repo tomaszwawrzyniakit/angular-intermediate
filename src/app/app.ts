@@ -1,12 +1,14 @@
-import { Component, signal } from '@angular/core';
+import { Component } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 
 @Component({
-  imports: [RouterOutlet],
   selector: 'app-root',
-  styleUrl: './app.scss',
-  templateUrl: './app.html',
+  imports: [RouterOutlet],
+  template: `
+    <main class="container py-4">
+      <h1 class="h3">OpsBoard</h1>
+      <router-outlet />
+    </main>
+  `,
 })
-export class App {
-  protected readonly title = signal('opsboard');
-}
+export class App {}
