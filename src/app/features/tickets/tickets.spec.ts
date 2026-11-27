@@ -1,5 +1,6 @@
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { vi } from 'vitest';
 
 import { MOCK_TICKETS } from '../../domain/tickets';
@@ -21,7 +22,10 @@ describe('Tickets (reactive search)', () => {
     vi.useFakeTimers();
     await TestBed.configureTestingModule({
       imports: [Tickets],
-      providers: [provideHttpClient(withInterceptors([mockTicketInterceptor]))],
+      providers: [
+        provideRouter([]),
+        provideHttpClient(withInterceptors([mockTicketInterceptor])),
+      ],
     }).compileComponents();
   });
 

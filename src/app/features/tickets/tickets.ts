@@ -8,6 +8,7 @@ import {
   signal,
 } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { Router } from '@angular/router';
 import { debounceTime, distinctUntilChanged, switchMap, tap } from 'rxjs';
 
 import { Ticket } from '../../domain/ticket';
@@ -166,6 +167,9 @@ export class Tickets {
   /** Single search service for the component (CLAUDE.md: `inject()`, not constructor DI). */
   private readonly searchService = inject(TicketSearchService);
 
+  /** Navigates to the lazy detail route on row selection (Task 06). */
+  private readonly router = inject(Router);
+
   // demo: signal() — the raw search text and the status filter are plain local state signals.
   readonly search = signal('');
   readonly statusFilter = signal<TicketFilterValue>('all');
@@ -269,9 +273,13 @@ export class Tickets {
     });
   }
 
-  /** demo: output() — emit the clicked ticket so a parent could react (detail view, etc). */
+  /**
+   * demo: output() — emit the clicked ticket (Task 04 keeps the signal-API demo),
+   * then navigate to the lazy `/tickets/:id` detail route (Task 06).
+   */
   selectTicket(ticket: Ticket): void {
     this.ticketSelected.emit(ticket);
+    this.router.navigate(['/tickets', ticket.id]);
   }
 
   clearFilters(): void {
