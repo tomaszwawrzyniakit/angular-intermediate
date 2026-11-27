@@ -45,7 +45,17 @@ import { TicketStatusBadge } from './ticket-status-badge';
 })
 export class TicketRow {
   readonly ticket = input.required<Ticket>();
+  // input() GOTCHAS:
+  //  - inputs are READ-ONLY: this.ticket.set(...) does not exist. Need a local, editable copy that
+  //    resets when the parent sends a new value? → draft = linkedSignal(() => this.ticket().title);
+  //    Need the parent to see the change? → model() (see status-filter.ts).
+  //  - reading a required input in the constructor / field initializer throws (NG0950):
+  //    it is set before the first render, so read it in computed()/template/effects.
+  //  - transforms for attribute-style inputs:  compact = input(false, { transform: booleanAttribute });
+  //  - alias:  ticket = input.required<Ticket>({ alias: 'appTicket' });
 
   // The row does not change data itself: it tells the parent what the user wants.
   readonly advance = output<Ticket>();
+  // output() is not an EventEmitter/Observable. Turning an Observable into an output:
+  //   readonly changed = outputFromObservable(this.something$);
 }

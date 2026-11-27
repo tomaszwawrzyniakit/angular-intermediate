@@ -54,4 +54,11 @@ describe('TicketList (signals + httpResource)', () => {
     expect(req.request.body).toEqual({ status: 'progress' });
     expect(rows()).toBe(5);
   });
+
+  it('keeps the page when a ticket changes (linkedSignal source = filters only)', async () => {
+    const { activePage, click } = await setup();
+    await click('2');
+    await click('Start'); // ticket #6 on page 2 → new tickets array
+    expect(activePage()).toBe('2');
+  });
 });

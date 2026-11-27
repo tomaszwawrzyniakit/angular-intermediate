@@ -26,6 +26,8 @@ export type StatusFilterValue = TicketStatus | 'all';
 export class StatusFilter {
   // model() = input + output in one: writing to it notifies the parent (valueChange).
   readonly value = model<StatusFilterValue>('all');
+  // GOTCHA: [(value)]="status" needs a WritableSignal (or a plain property) – passing a
+  // computed() or an input() of the parent does not compile, because the child writes back.
 
   protected readonly options: { value: StatusFilterValue; label: string }[] = [
     { value: 'all', label: 'All' },

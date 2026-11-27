@@ -21,7 +21,9 @@ export class TicketStore {
   private readonly resource = httpResource<Ticket[]>(() => '/api/tickets', { defaultValue: [] });
 
   // Selectors (read-only for the outside world)
-  readonly tickets = this.resource.value.asReadonly();
+  // GOTCHA: a resource in the error state THROWS from value() (even with defaultValue). Every
+  // computed()/template that reads it would crash, so guard with hasValue().
+  readonly tickets = computed(() => (this.resource.hasValue() ? this.resource.value() : []));
   readonly loading = computed(() => this.resource.isLoading() && !this.resource.hasValue());
   readonly error = this.resource.error;
 
@@ -37,6 +39,9 @@ export class TicketStore {
 
   /** Optimistic update: the UI changes at once; if the server says no, we re-fetch the truth. */
   update(id: number, changes: Partial<Pick<Ticket, 'status' | 'assignee'>>): void {
+    // Immutable update: a NEW array with a NEW ticket object. Mutating in place
+    //   this.resource.value().find((t) => t.id === id)!.status = 'done';   // WRONG
+    // changes the data but no signal notices (same reference) → the UI does not refresh.
     this.resource.value.update((list) => list.map((t) => (t.id === id ? { ...t, ...changes } : t)));
     this.api.update(id, changes).subscribe({ error: () => this.reload() });
   }

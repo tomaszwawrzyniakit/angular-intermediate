@@ -38,4 +38,18 @@ describe('TicketStore', () => {
     await settle();
     expect(store.openCount()).toBe(4);
   });
+
+  it('does not throw when the request failed (value() throws in the error state)', async () => {
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    });
+    const store = TestBed.inject(TicketStore);
+    TestBed.tick();
+    TestBed.inject(HttpTestingController)
+      .expectOne('/api/tickets')
+      .flush(null, { status: 500, statusText: 'Error' });
+    await settle();
+    expect(store.error()).toBeTruthy();
+    expect(store.tickets()).toEqual([]);
+  });
 });

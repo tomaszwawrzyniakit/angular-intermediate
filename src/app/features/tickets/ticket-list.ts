@@ -100,6 +100,11 @@ export default class TicketList {
   protected readonly status = signal<StatusFilterValue>('all');
 
   // computed(): derived state. Recalculated only when query, status or tickets change.
+  // GOTCHAS:
+  //  - dependencies are tracked dynamically: a signal read only inside an `if` branch that did not
+  //    run is NOT a dependency (until the branch runs);
+  //  - computed() must be pure – no set(), no HTTP; a signal write inside throws (NG0600);
+  //  - the result is compared with Object.is: return a new array/object to notify readers.
   protected readonly filtered = computed(() => {
     const q = this.query().trim().toLowerCase();
     const status = this.status();
@@ -110,9 +115,20 @@ export default class TicketList {
       );
   });
 
-  // linkedSignal(): writable (the user clicks a page) BUT reset to 1 whenever the filtered list
-  // changes – otherwise you could stay on page 3 of a list that now has only one page.
-  protected readonly page = linkedSignal({ source: this.filtered, computation: () => 1 });
+  // linkedSignal(): writable (the user clicks a page) BUT reset to 1 when the FILTERS change –
+  // otherwise you could stay on page 3 of a list that now has only one page.
+  //
+  // GOTCHA – choose the source carefully. With `source: this.filtered` the page jumped back to 1
+  // every time ANY ticket changed (clicking "Start" on page 2 creates a new array → new source).
+  // The source is "what should reset me", here only the filter criteria:
+  protected readonly page = linkedSignal({
+    source: () => ({ query: this.query(), status: this.status() }),
+    computation: () => 1,
+  });
+  // Shorthand form – same thing, the dependencies are whatever the function reads:
+  //   page = linkedSignal(() => { this.query(); this.status(); return 1; });
+  // With `previous` you can keep the user's choice when it is still valid:
+  //   computation: (src, previous) => Math.min(previous?.value ?? 1, pageCountFor(src)),
 
   protected readonly pageCount = computed(() => Math.ceil(this.filtered().length / PAGE_SIZE));
   protected readonly pages = computed(() =>
@@ -149,6 +165,15 @@ export default class TicketList {
         { injector: this.injector },
       );
     });
+
+    // effect() GOTCHAS:
+    //  - WRONG: deriving state with an effect (extra render, glitches, loops):
+    //      effect(() => this.filtered.set(this.tickets().filter(...)));   → use computed()
+    //  - Every signal read inside is a dependency. Read without tracking with untracked():
+    //      effect(() => log(this.query(), untracked(() => this.status())));  // re-runs on query only
+    //  - Effects run asynchronously (during change detection), not right after set().
+    //  - Need the DOM after render (measure, 3rd-party chart, focus)? afterRenderEffect():
+    //      afterRenderEffect(() => chart.update(this.filtered()));
   }
 
   /** GitHub-style shortcut: "/" focuses the filter box. */
