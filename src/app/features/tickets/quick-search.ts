@@ -95,6 +95,16 @@ export class QuickSearch {
   );
 }
 
-// The opposite direction, for reference:
-//   const tickets = toSignal(this.api.search(''), { initialValue: [] }); // Observable → Signal
-//   toObservable(signal) needs an injection context (field initializer or constructor).
+// RxJS interop GOTCHAS:
+//  - toSignal() subscribes IMMEDIATELY and unsubscribes when the component is destroyed.
+//    Without initialValue the type is T | undefined; { requireSync: true } for sync sources
+//    (BehaviorSubject); errors are rethrown when the signal is read – catch them in the pipe.
+//  - toSignal()/toObservable() need an injection context (field initializer or constructor),
+//    otherwise pass { injector }.
+//  - toObservable() emits asynchronously and only the LAST value of a synchronous burst
+//    (set('a'); set('ab') → one emission 'ab'): it is not an event stream.
+//  - A manual subscribe() in a component should be cleaned up:
+//      this.api.search(q).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(...)
+//    (HttpClient completes after one response, so short PATCH calls like in TicketStore are fine.)
+//  - switchMap = newest wins (search); concatMap = keep order (queue of saves);
+//    exhaustMap = ignore while busy (double-clicked "Save"); mergeMap = all in parallel.

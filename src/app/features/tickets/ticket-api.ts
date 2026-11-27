@@ -5,6 +5,7 @@ import { Observable } from 'rxjs';
 import { Ticket } from './ticket';
 
 /**
+ * @Service() (v22) = shorthand for @Injectable({ providedIn: 'root' }): a lazy singleton.
  * Commands and one-off queries for /api/tickets.
  * Reactive reads (list, detail) use httpResource() directly in the components.
  */

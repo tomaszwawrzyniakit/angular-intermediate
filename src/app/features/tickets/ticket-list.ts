@@ -61,6 +61,9 @@ const NEXT_STATUS: Record<TicketStatus, TicketStatus> = {
         }
       </div>
     } @else {
+      <!-- @for GOTCHA: track by a stable id. "track $index" re-uses DOM rows by position, so after
+           sorting/removing, focus and component state stay on the wrong row; "track ticket"
+           re-creates every row after each re-fetch (new objects). -->
       <div class="list-group mb-3">
         @for (ticket of pageTickets(); track ticket.id) {
           <app-ticket-row [ticket]="ticket" (advance)="advance($event)" />

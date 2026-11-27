@@ -80,7 +80,13 @@ import { StatusChart } from './status-chart';
     <!-- Other @defer triggers, for reference:
          @defer (on interaction(button))  – e.g. a "Show history" panel
          @defer (on hover; prefetch on idle)  – download early, render later
-         @defer (when showAdvanced())  – any signal/boolean condition -->
+         @defer (when showAdvanced())  – any signal/boolean condition
+         GOTCHAS:
+         - Only STANDALONE dependencies used ONLY inside the block are split out. If StatusChart
+           were also used elsewhere in this file (or referenced in TS), it would be bundled eagerly.
+         - On the server a @defer block renders its @placeholder – unless it has a hydrate trigger
+           (incremental hydration), then the main content is rendered and hydrated later.
+         - "on viewport" needs a single root element in @placeholder (it observes that element). -->
   `,
 })
 export default class Dashboard {

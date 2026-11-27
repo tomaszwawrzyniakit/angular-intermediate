@@ -90,3 +90,12 @@ export default class TicketDetail {
 //   });
 //
 // With an Observable-based loader: rxResource({ params, stream: ({ params }) => http.get(...) })
+//
+// Resource GOTCHAS:
+//  - Resources are for READING. Saving (POST/PATCH/DELETE) is a command: HttpClient, not a resource.
+//  - value() THROWS in the error state → check error()/hasValue() first (see ticket-store.ts).
+//  - Return undefined from the request/params function → the resource stays idle (no request):
+//      httpResource(() => this.id() ? `/api/tickets/${this.id()}` : undefined)
+//  - isLoading() is also true during reload(); the old value stays visible meanwhile
+//    (status() === 'reloading') – good for "refresh without a blank screen".
+//  - Validate the response shape: httpResource(url, { parse: (raw) => TicketSchema.parse(raw) }).
