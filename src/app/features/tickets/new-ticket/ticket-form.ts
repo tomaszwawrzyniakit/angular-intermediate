@@ -30,7 +30,11 @@ export interface TicketDraft {
   impact: {
     serviceDown: boolean;
     affectedUsers: number;
-    services: string[]; // dynamic list: the user adds/removes rows
+    // Dynamic list: the user adds/removes rows.
+    // GOTCHA: use OBJECTS, not strings. Field state (touched, errors) of object items follows the
+    // item; for primitive items it stays at the INDEX – remove row 1 and row 2's "touched" state
+    // jumps to the row that moved up. (Verified in ticket-form.spec.ts.)
+    services: { name: string }[];
     workaroundAvailable: boolean;
     workaround: string;
   };
@@ -42,7 +46,7 @@ export const EMPTY_DRAFT: TicketDraft = {
   impact: {
     serviceDown: false,
     affectedUsers: 0,
-    services: [''],
+    services: [{ name: '' }],
     workaroundAvailable: false,
     workaround: '',
   },
@@ -88,7 +92,7 @@ export const ticketDraftSchema = schema<TicketDraft>((t) => {
   // 6) Dynamic list: applyEach() applies the rules to every item, also to rows added later
   min(t.impact.affectedUsers, 0, { message: 'Cannot be negative.' });
   applyEach(t.impact.services, (service) =>
-    required(service, { message: 'Name the service or remove the row.' }),
+    required(service.name, { message: 'Name the service or remove the row.' }),
   );
 
   // 7) Business rule spanning two steps: an outage for >100 users must be high priority

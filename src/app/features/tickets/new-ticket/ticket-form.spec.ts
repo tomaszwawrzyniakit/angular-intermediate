@@ -39,12 +39,22 @@ describe('ticketDraftSchema (Signal Forms rules)', () => {
 
   it('dynamic list + hidden section', () => {
     const f = createForm();
-    expect(f.impact.services[0]().invalid()).toBe(true); // applyEach → required
-    f.impact.services[0]().value.set('checkout-api');
-    expect(f.impact.services[0]().valid()).toBe(true);
+    expect(f.impact.services[0].name().invalid()).toBe(true); // applyEach → required
+    f.impact.services[0].name().value.set('checkout-api');
+    expect(f.impact.services[0].name().valid()).toBe(true);
 
     expect(f.impact.workaround().hidden()).toBe(true); // no rules while hidden
     f.impact.workaroundAvailable().value.set(true);
     expect(kinds(f.impact.workaround)).toEqual(['required']);
+  });
+
+  it('array items: field state follows object items, not the index', () => {
+    const f = createForm();
+    f.impact.services().value.set([{ name: 'a' }, { name: 'b' }]);
+    const b = f.impact.services[1];
+    b.name().markAsTouched();
+    f.impact.services().value.update((list) => list.slice(1)); // remove "a"
+    expect(f.impact.services[0]).toBe(b); // the same field moved up together with its item
+    expect(f.impact.services[0].name().touched()).toBe(true);
   });
 });

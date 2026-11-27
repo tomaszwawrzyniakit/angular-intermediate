@@ -130,12 +130,12 @@ const STEPS = ['Problem', 'Reporter', 'Impact', 'Review'] as const;
             <!-- Dynamic section: one input per array item -->
             <fieldset class="mb-3">
               <legend class="form-label fs-6">Affected services</legend>
-              @for (service of form.impact.services; track $index; let i = $index) {
+              @for (service of form.impact.services; track service; let i = $index) {
                 <div class="input-group mb-2">
                   <input
                     class="form-control"
                     [attr.aria-label]="'Service ' + (i + 1)"
-                    [formField]="service"
+                    [formField]="service.name"
                   />
                   <button
                     type="button"
@@ -146,7 +146,7 @@ const STEPS = ['Problem', 'Reporter', 'Impact', 'Review'] as const;
                     <i class="bi bi-x-lg"></i>
                   </button>
                 </div>
-                <app-field-errors [field]="service()" />
+                <app-field-errors [field]="service.name()" />
               }
               <button type="button" class="btn btn-sm btn-outline-secondary" (click)="addService()">
                 <i class="bi bi-plus"></i> Add service
@@ -181,9 +181,7 @@ const STEPS = ['Problem', 'Reporter', 'Impact', 'Review'] as const;
               <dt class="col-sm-3">Reporter</dt>
               <dd class="col-sm-9">{{ d.reporter.name }} · {{ d.reporter.email }}</dd>
               <dt class="col-sm-3">Impact</dt>
-              <dd class="col-sm-9">
-                {{ d.impact.affectedUsers }} users · {{ d.impact.services.join(', ') }}
-              </dd>
+              <dd class="col-sm-9">{{ d.impact.affectedUsers }} users · {{ serviceNames() }}</dd>
             </dl>
             @if (form.basics.title().errors().length) {
               <div class="alert alert-danger mt-3 mb-0" role="alert">
@@ -266,6 +264,14 @@ export default class NewTicket {
   /** Read by the canDeactivate guard in tickets.routes.ts. dirty() = the user changed something. */
   readonly hasUnsavedChanges = computed(() => this.form().dirty() && !this.saved());
 
+  protected readonly serviceNames = computed(() =>
+    this.form.impact
+      .services()
+      .value()
+      .map((s) => s.name)
+      .join(', '),
+  );
+
   /** The sub-form (FieldTree) of the current step; the Review step has none. */
   protected readonly currentStep = computed(
     () => [this.form.basics, this.form.reporter, this.form.impact, this.form][this.step()],
@@ -286,7 +292,7 @@ export default class NewTicket {
 
   // Dynamic list = change the array in the model; the form follows.
   protected addService(): void {
-    this.form.impact.services().value.update((list) => [...list, '']);
+    this.form.impact.services().value.update((list) => [...list, { name: '' }]);
   }
 
   protected removeService(index: number): void {
