@@ -16,6 +16,10 @@ export class TicketApi {
     return this.http.get<Ticket[]>('/api/tickets', { params: { q: query } });
   }
 
+  create(draft: Pick<Ticket, 'title' | 'description' | 'priority'>): Observable<Ticket> {
+    return this.http.post<Ticket>('/api/tickets', draft);
+  }
+
   update(id: number, changes: Partial<Pick<Ticket, 'status' | 'assignee'>>): Observable<Ticket> {
     return this.http.patch<Ticket>(`/api/tickets/${id}`, changes);
   }

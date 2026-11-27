@@ -115,6 +115,17 @@ ticketApi.get('/tickets', async (req, res) => {
   res.json(tickets.filter((t) => t.title.toLowerCase().includes(q)));
 });
 
+// GET /api/tickets/title-check?title=…  (async validation of the new-ticket form)
+// Declared BEFORE '/tickets/:id' – Express, like the Angular router, takes the first match.
+ticketApi.get('/tickets/title-check', async (req, res) => {
+  await delay(400);
+  const title = String(req.query['title'] ?? '')
+    .trim()
+    .toLowerCase();
+  const duplicate = tickets.find((t) => t.title.toLowerCase() === title);
+  res.json({ duplicateOf: duplicate ? { id: duplicate.id, title: duplicate.title } : null });
+});
+
 ticketApi.get('/tickets/:id', async (req, res) => {
   await delay(300);
   const ticket = tickets.find((t) => t.id === Number(req.params.id));
@@ -136,4 +147,28 @@ ticketApi.patch('/tickets/:id', async (req, res) => {
   const { status, assignee } = req.body as Partial<Ticket>;
   Object.assign(ticket, status ? { status } : {}, assignee !== undefined ? { assignee } : {});
   res.json(ticket);
+});
+
+// POST /api/tickets  – server-side validation returns 422 with field errors.
+ticketApi.post('/tickets', async (req, res) => {
+  await delay(500);
+  const { title, description, priority } = req.body as Pick<
+    Ticket,
+    'title' | 'description' | 'priority'
+  >;
+  if (/\btest\b/i.test(title)) {
+    res.status(422).json({
+      errors: [{ field: 'title', message: 'Test tickets are not allowed in production.' }],
+    });
+    return;
+  }
+  const ticket: Ticket = {
+    id: Math.max(...tickets.map((t) => t.id)) + 1,
+    title,
+    description,
+    priority,
+    status: 'new',
+  };
+  tickets.push(ticket);
+  res.status(201).json(ticket);
 });

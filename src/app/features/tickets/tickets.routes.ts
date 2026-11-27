@@ -11,7 +11,7 @@ export default [
   {
     path: 'new',
     title: 'New ticket · OpsBoard',
-    loadComponent: () => import('./new-ticket'),
+    loadComponent: () => import('./new-ticket/new-ticket'),
   },
   {
     path: ':id',

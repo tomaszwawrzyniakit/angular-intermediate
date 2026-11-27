@@ -1,5 +1,6 @@
 import { provideHttpClient } from '@angular/common/http';
 import { ApplicationConfig, provideBrowserGlobalErrorListeners } from '@angular/core';
+import { provideSignalFormsConfig } from '@angular/forms/signals';
 import { provideClientHydration } from '@angular/platform-browser';
 import { provideRouter, withComponentInputBinding } from '@angular/router';
 
@@ -15,5 +16,13 @@ export const appConfig: ApplicationConfig = {
     provideRouter(routes, withComponentInputBinding()),
     provideHttpClient(), // fetch-based by default
     provideClientHydration(),
+    // Signal Forms add these CSS classes to every [formField] control → Bootstrap validation styles
+    // with no per-input [class.is-invalid] bindings.
+    provideSignalFormsConfig({
+      classes: {
+        'is-invalid': ({ state }) => state().invalid() && state().touched(),
+        'is-valid': ({ state }) => state().valid() && state().touched(),
+      },
+    }),
   ],
 };
