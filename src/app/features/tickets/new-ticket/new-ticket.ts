@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 
 import { TicketApi } from '../ticket-api';
+import { TicketStore } from '../ticket-store';
 import { FieldErrors } from './field-errors';
 import { EMPTY_DRAFT, TicketDraft, ticketDraftSchema } from './ticket-form';
 
@@ -217,6 +218,7 @@ const STEPS = ['Problem', 'Reporter', 'Impact', 'Review'] as const;
 export default class NewTicket {
   private readonly api = inject(TicketApi);
   private readonly router = inject(Router);
+  private readonly store = inject(TicketStore);
 
   protected readonly steps = STEPS;
   protected readonly step = signal(0);
@@ -231,6 +233,7 @@ export default class NewTicket {
         const { basics } = root().value();
         try {
           const ticket = await firstValueFrom(this.api.create(basics));
+          this.store.added(ticket);
           await this.router.navigate(['/tickets', ticket.id]);
           return undefined;
         } catch (e) {

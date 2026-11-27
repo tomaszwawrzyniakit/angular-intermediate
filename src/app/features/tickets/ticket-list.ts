@@ -1,4 +1,3 @@
-import { httpResource } from '@angular/common/http';
 import {
   afterNextRender,
   Component,
@@ -13,7 +12,7 @@ import {
 } from '@angular/core';
 
 import { Ticket, TicketStatus } from './ticket';
-import { TicketApi } from './ticket-api';
+import { TicketStore } from './ticket-store';
 import { TicketRow } from './ticket-row';
 import { StatusFilter, StatusFilterValue } from './status-filter';
 
@@ -44,18 +43,18 @@ const NEXT_STATUS: Record<TicketStatus, TicketStatus> = {
       <app-status-filter [(value)]="status" />
     </div>
 
-    @if (tickets.error()) {
+    @if (store.error()) {
       <div class="alert alert-danger d-flex align-items-center gap-3" role="alert">
         <i class="bi bi-exclamation-octagon"></i> Could not load tickets.
         <button
           type="button"
           class="btn btn-sm btn-outline-danger ms-auto"
-          (click)="tickets.reload()"
+          (click)="store.reload()"
         >
           Retry
         </button>
       </div>
-    } @else if (tickets.isLoading() && !tickets.hasValue()) {
+    } @else if (store.loading()) {
       <div class="list-group mb-3 placeholder-glow" aria-busy="true">
         @for (i of [1, 2, 3, 4, 5]; track i) {
           <div class="list-group-item"><span class="placeholder col-8"></span></div>
@@ -93,11 +92,8 @@ const NEXT_STATUS: Record<TicketStatus, TicketStatus> = {
 export default class TicketList {
   private readonly injector = inject(Injector);
 
-  private readonly api = inject(TicketApi);
-
-  // httpResource(): a GET as a signal-based resource → value(), isLoading(), error(), reload().
-  // The value is writable, which makes optimistic updates easy (see advance()).
-  protected readonly tickets = httpResource<Ticket[]>(() => '/api/tickets', { defaultValue: [] });
+  // Shared data comes from the store (module 6); filters and paging stay local UI state.
+  protected readonly store = inject(TicketStore);
 
   // signal(): local UI state ("local state first").
   protected readonly query = signal('');
@@ -107,8 +103,8 @@ export default class TicketList {
   protected readonly filtered = computed(() => {
     const q = this.query().trim().toLowerCase();
     const status = this.status();
-    return this.tickets
-      .value()
+    return this.store
+      .tickets()
       .filter(
         (t) => (status === 'all' || t.status === status) && t.title.toLowerCase().includes(q),
       );
@@ -133,6 +129,11 @@ export default class TicketList {
   constructor() {
     // localStorage exists only in the browser. afterNextRender() never runs on the server and runs
     // after hydration, so the server HTML and the first client render stay identical.
+    //
+    // WRONG (hydration mismatch, try it live):
+    //   query = signal(isPlatformBrowser(inject(PLATFORM_ID)) ? localStorage.getItem(...) : '');
+    // The server renders all tickets, the browser's first render shows only the filtered ones →
+    // the DOM differs → NG0500 errors in the console / "mismatch" in Angular DevTools.
     afterNextRender(() => {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
       this.query.set(saved.query ?? '');
@@ -161,12 +162,7 @@ export default class TicketList {
   }
 
   protected advance(ticket: Ticket): void {
-    const status = NEXT_STATUS[ticket.status];
-    // Optimistic update: change the UI now, then tell the server; on error re-fetch the truth.
-    this.tickets.value.update((list) =>
-      list.map((t) => (t.id === ticket.id ? { ...t, status } : t)),
-    );
-    this.api.update(ticket.id, { status }).subscribe({ error: () => this.tickets.reload() });
+    this.store.update(ticket.id, { status: NEXT_STATUS[ticket.status] });
   }
 
   protected clearFilters(): void {

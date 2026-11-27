@@ -1,18 +1,18 @@
-import { httpResource } from '@angular/common/http';
-import { Component, computed } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { Ticket } from '../tickets/ticket';
+import { TicketStore } from '../tickets/ticket-store';
 import { StatusChart } from './status-chart';
 
 @Component({
   selector: 'app-dashboard',
   imports: [RouterLink, StatusChart],
   template: `
+    @let vm = this.vm();
     <h1 class="h3 mb-4">Operations overview</h1>
 
     <div class="row g-3 mb-4">
-      @for (kpi of kpis(); track kpi.label) {
+      @for (kpi of vm.kpis; track kpi.label) {
         <div class="col-6 col-lg-3">
           <div class="card h-100">
             <div class="card-body">
@@ -20,7 +20,7 @@ import { StatusChart } from './status-chart';
                 <i class="bi {{ kpi.icon }}"></i> {{ kpi.label }}
               </div>
               <div class="fs-2 fw-semibold {{ kpi.css }}">
-                {{ tickets.hasValue() ? kpi.value : '–' }}
+                {{ vm.ready ? kpi.value : '–' }}
               </div>
             </div>
           </div>
@@ -33,7 +33,7 @@ import { StatusChart } from './status-chart';
         <div class="card h-100">
           <div class="card-header">Needs an owner (high priority)</div>
           <div class="list-group list-group-flush">
-            @for (t of unassignedHigh(); track t.id) {
+            @for (t of vm.unassignedHigh; track t.id) {
               <a class="list-group-item list-group-item-action" [routerLink]="['/tickets', t.id]">
                 #{{ t.id }} {{ t.title }}
               </a>
@@ -58,7 +58,7 @@ import { StatusChart } from './status-chart';
                                     but its JS is downloaded and hydrated only when visible
             -->
             @defer (on viewport; hydrate on viewport) {
-              <app-status-chart [tickets]="tickets.value()" />
+              <app-status-chart [tickets]="vm.tickets" />
             } @placeholder (minimum 300ms) {
               <div class="placeholder-glow">
                 <span class="placeholder col-12 mb-2"></span>
@@ -84,39 +84,38 @@ import { StatusChart } from './status-chart';
   `,
 })
 export default class Dashboard {
-  protected readonly tickets = httpResource<Ticket[]>(() => '/api/tickets', { defaultValue: [] });
+  private readonly store = inject(TicketStore);
 
-  protected readonly unassignedHigh = computed(() =>
-    this.tickets.value().filter((t) => t.priority === 'high' && !t.assignee && t.status !== 'done'),
-  );
-
-  protected readonly kpis = computed(() => {
-    const all = this.tickets.value();
-    return [
-      {
-        label: 'Open',
-        icon: 'bi-inbox',
-        css: '',
-        value: all.filter((t) => t.status !== 'done').length,
-      },
-      {
-        label: 'High priority',
-        icon: 'bi-exclamation-triangle',
-        css: 'text-danger',
-        value: all.filter((t) => t.priority === 'high').length,
-      },
-      {
-        label: 'Done',
-        icon: 'bi-check2-circle',
-        css: 'text-success',
-        value: all.filter((t) => t.status === 'done').length,
-      },
-      {
-        label: 'Unassigned',
-        icon: 'bi-person-dash',
-        css: 'text-warning',
-        value: all.filter((t) => !t.assignee).length,
-      },
-    ];
+  // ViewModel pattern: ONE computed() with everything the template needs, already shaped for it.
+  // The template reads `vm` once (@let) and stays free of logic; the vm is easy to unit-test.
+  protected readonly vm = computed(() => {
+    const all = this.store.tickets();
+    const count = (predicate: (t: (typeof all)[number]) => boolean) => all.filter(predicate).length;
+    return {
+      ready: !this.store.loading(),
+      tickets: all,
+      unassignedHigh: this.store.unassignedHigh(),
+      kpis: [
+        { label: 'Open', icon: 'bi-inbox', css: '', value: this.store.openCount() },
+        {
+          label: 'High priority',
+          icon: 'bi-exclamation-triangle',
+          css: 'text-danger',
+          value: count((t) => t.priority === 'high'),
+        },
+        {
+          label: 'Done',
+          icon: 'bi-check2-circle',
+          css: 'text-success',
+          value: count((t) => t.status === 'done'),
+        },
+        {
+          label: 'Unassigned',
+          icon: 'bi-person-dash',
+          css: 'text-warning',
+          value: count((t) => !t.assignee),
+        },
+      ],
+    };
   });
 }

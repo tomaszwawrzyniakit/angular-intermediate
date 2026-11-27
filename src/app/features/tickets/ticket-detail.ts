@@ -4,7 +4,7 @@ import { RouterLink } from '@angular/router';
 
 import { AssigneePicker } from './assignee-picker';
 import { Ticket } from './ticket';
-import { TicketApi } from './ticket-api';
+import { TicketStore } from './ticket-store';
 import { TicketStatusBadge } from './ticket-status-badge';
 
 @Component({
@@ -71,13 +71,13 @@ export default class TicketDetail {
   // aborted and a new one starts. 404/500 → error(); reload() repeats the same request.
   protected readonly ticket = httpResource<Ticket>(() => `/api/tickets/${this.id()}`);
 
-  private readonly api = inject(TicketApi);
+  private readonly store = inject(TicketStore);
 
   protected assign(assignee: string | undefined): void {
-    const id = Number(this.id());
-    // Optimistic: a resource's value is a WritableSignal; on error re-fetch the server state.
+    // A resource's value is a WritableSignal: update this page at once…
     this.ticket.value.update((t) => t && { ...t, assignee });
-    this.api.update(id, { assignee }).subscribe({ error: () => this.ticket.reload() });
+    // …and let the store save it and keep the shared list in sync.
+    this.store.update(Number(this.id()), { assignee });
   }
 }
 

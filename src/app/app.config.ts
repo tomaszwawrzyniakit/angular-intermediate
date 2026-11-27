@@ -15,6 +15,10 @@ export const appConfig: ApplicationConfig = {
     // Route params, query params and route data are bound to component inputs.
     provideRouter(routes, withComponentInputBinding()),
     provideHttpClient(), // fetch-based by default
+    // Hydration: the browser REUSES the server HTML instead of re-rendering it. In v22 it also
+    // enables incremental hydration (@defer ... hydrate on …) and event replay (clicks made before
+    // the JS is ready are recorded and replayed). GET responses made during SSR are put into the
+    // page (HTTP transfer cache), so the browser does not request them again – check Network.
     provideClientHydration(),
     // Signal Forms add these CSS classes to every [formField] control → Bootstrap validation styles
     // with no per-input [class.is-invalid] bindings.
