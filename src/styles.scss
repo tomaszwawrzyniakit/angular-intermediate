@@ -1,1 +1,130 @@
-/* You can add global styles to this file, and also import other style files */
+/*
+ * OpsBoard global theme — dark "ops console / NOC" look.
+ *
+ * Strategy: Bootstrap 5.3 variables + a few component tweaks on top.
+ * Everything else is standard Bootstrap classes in the templates.
+ */
+
+:root {
+  --ops-bg: #0b1220; // deep navy page background
+  --ops-surface: #111c30; // cards / surfaces
+  --ops-surface-2: #16233c; // raised surfaces (list rows)
+  --ops-border: #26374f;
+  --ops-accent: #22d3ee; // cyan accent (icons, focus ring)
+  --ops-accent-soft: #67e8f9; // cyan for links / emphasis text
+  --ops-ok: #4ade80; // "all systems nominal" glow dot
+}
+
+// Dark ops-console theme.
+// NOTE: Bootstrap `text-bg-*` badges render WHITE text, so every semantic
+// color below is chosen dark enough for white text to meet WCAG AA (>= 4.5:1).
+html[data-bs-theme='dark'] {
+  --bs-body-bg: var(--ops-bg);
+  --bs-body-color: #dbe4f0;
+  --bs-tertiary-bg: var(--ops-surface);
+  --bs-border-color: var(--ops-border);
+
+  // primary = dark cyan (button/progress badge backgrounds, white text)
+  --bs-primary: #155e75;
+  --bs-primary-rgb: 21, 94, 117;
+  --bs-primary-text-emphasis: var(--ops-accent-soft);
+  --bs-link-color: var(--ops-accent-soft);
+  --bs-link-color-rgb: 103, 232, 249;
+  --bs-link-hover-color: #a5f3fc;
+
+  // secondary = slate (low priority / total badge)
+  --bs-secondary: #475569;
+  --bs-secondary-rgb: 71, 85, 105;
+  --bs-secondary-bg-subtle: var(--ops-surface-2);
+
+  // status + priority badge colors
+  --bs-danger: #991b1b;
+  --bs-danger-rgb: 153, 27, 27;
+  --bs-danger-bg-subtle: rgba(248, 113, 113, 0.15);
+
+  --bs-warning: #854d0e;
+  --bs-warning-rgb: 133, 77, 14;
+  --bs-warning-bg-subtle: rgba(251, 191, 36, 0.15);
+
+  --bs-success: #166534;
+  --bs-success-rgb: 22, 101, 52;
+  --bs-success-bg-subtle: rgba(74, 222, 128, 0.15);
+
+  --bs-info: #075985;
+  --bs-info-rgb: 7, 89, 133;
+  --bs-info-bg-subtle: rgba(56, 189, 248, 0.15);
+}
+
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(1200px 500px at 80% -10%, rgba(34, 211, 238, 0.06), transparent 60%),
+    var(--ops-bg);
+  font-family:
+    'Segoe UI',
+    system-ui,
+    -apple-system,
+    'Helvetica Neue',
+    Arial,
+    sans-serif;
+}
+
+// Cards: flat dark surface, subtle border, no default white.
+.card {
+  --bs-card-bg: var(--ops-surface);
+  --bs-card-border-color: var(--ops-border);
+  --bs-card-cap-bg: transparent;
+  --bs-card-inner-border-radius: 0;
+  border-radius: 0.75rem;
+}
+
+.card .list-group-flush > .list-group-item {
+  --bs-list-group-bg: transparent;
+  --bs-list-group-border-color: var(--ops-border);
+}
+
+// Ticket row hover highlight.
+.ticket-row:hover {
+  background-color: var(--ops-surface-2) !important;
+}
+
+// Navbar brand accent icon.
+.navbar-brand .accent {
+  color: var(--ops-accent);
+}
+
+// "All systems nominal" status dot in the navbar.
+.status-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--ops-ok);
+  box-shadow: 0 0 0.4rem var(--ops-ok);
+}
+
+// KPI icon circle on the dashboard.
+.kpi-icon {
+  width: 2.75rem;
+  height: 2.75rem;
+  flex-shrink: 0;
+  background: rgba(34, 211, 238, 0.12);
+  color: var(--ops-accent);
+}
+
+.kpi-value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+// Accessible focus ring (WCAG 2.4.7) — clear visible outline.
+:focus-visible {
+  outline: 2px solid var(--ops-accent);
+  outline-offset: 2px;
+  border-radius: 0.25rem;
+}
+
+// Ticket id column.
+.ticket-id {
+  min-width: 2.75rem;
+}
