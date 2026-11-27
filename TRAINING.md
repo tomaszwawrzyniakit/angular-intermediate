@@ -22,6 +22,14 @@ daje stan po module, a `git diff <poprzedni>..<hash>` pokazuje dokładnie, co do
 | 4 | `9422905` feat(m4): new-ticket wizard with Signal Forms |
 | 5 | `20d883c` feat(m5): dashboard with @defer, UX states and an Angular Aria picker |
 | 6 | `c8aaae0` feat(m6): signal store, ViewModel and hybrid rendering |
+| Pułapki | `7a8f60c` fix(m2): linkedSignal source and resource error state |
+| | `d80d4bb` fix(m4): block "Next" while async validation runs |
+| | `05d3293` feat(m1): canDeactivate guard for an unsaved wizard |
+| | `e3a9f3c` fix(m4): dynamic list of objects so field state follows the row |
+| | `59812c5` docs(m3,m5): gotcha snippets |
+
+Commity „Pułapki” to prawdziwe błędy, które same wyszły podczas pisania aplikacji. Ich diff
+to gotowy materiał na slajd „przed / po”.
 
 Zasada UI: tylko klasy Bootstrapa (`styles.scss` jest pusty), żadnego Bootstrap JS – stan
 interaktywny (zakładki kroków, dropdown wyszukiwarki) trzymają sygnały.
@@ -86,7 +94,7 @@ Pliki: `new-ticket/ticket-form.ts` (model + reguły), `new-ticket/new-ticket.ts`
   `phoneNumber()`, async `validateHttp` (duplikat tytułu – spróbuj
   „Payment gateway timeouts in production”), reguła biznesowa między krokami
   (awaria > 100 użytkowników ⇒ priorytet high), sekcja warunkowa `hidden()` (obejście).
-- Dynamiczna sekcja: lista usług + `applyEach()`; dodawanie/usuwanie = zmiana tablicy w modelu.
+- Dynamiczna sekcja: lista usług (obiekty `{ name }`) + `applyEach()`; dodawanie/usuwanie = zmiana tablicy w modelu.
 - Formularz wieloetapowy: każdy krok to pod-obiekt modelu, „Next” robi `markAsTouched()` i
   sprawdza `valid()` tylko tego kroku.
 - Walidacja serwerowa: tytuł ze słowem „test” → 422 → błąd wraca na pole tytułu (`submission.action`).
@@ -133,12 +141,75 @@ Pliki: `tickets/ticket-store.ts`, `dashboard/dashboard.ts`, `app.routes.server.t
   lazy chunki (`ticket-list`, `new-ticket`, `status-chart`) widoczne w wyjściu builda.
 - **Chrome Performance / Lighthouse** na wersji SSR (`npm run serve:ssr:opsboard`): LCP, CLS.
 
+## Pułapki (do pokazania na żywo)
+
+Każda pułapka ma komentarz w kodzie obok miejsca, którego dotyczy.
+
+**Signals** (`ticket-list.ts`, `ticket-row.ts`, `status-filter.ts`, `ticket-store.ts`)
+- `linkedSignal`: źródło = „co ma mnie resetować”. Gdy źródłem była przefiltrowana lista, klik
+  „Start” na stronie 2 cofał na stronę 1 (nowa tablica = nowe źródło). Teraz źródłem są same
+  filtry. Pokaż też `previous`, czyli zachowanie wyboru, jeśli nadal jest poprawny.
+- `computed`: zależności są dynamiczne (gałąź `if`, która się nie wykonała, nie jest
+  zależnością). Musi być czysty, a zapis sygnału w środku daje NG0600. Porównanie przez
+  `Object.is`, więc zwracaj nową tablicę.
+- Mutacja w miejscu (`find(...).status = 'done'`) nie powiadamia nikogo. Zawsze `update` z nową
+  tablicą lub obiektem.
+- `effect` nie służy do stanu pochodnego. `untracked()`, efekty są asynchroniczne,
+  `afterRenderEffect` do pracy z DOM.
+- `input()` jest tylko do odczytu. Jeśli potrzebujesz kopii do edycji, użyj
+  `linkedSignal(() => input())`, a jeśli rodzic ma zobaczyć zmianę, użyj `model()`. Odczyt
+  wymaganego inputu w konstruktorze daje NG0950 (złapaliśmy to w Angular Aria, kolejność
+  bindingów na hoście). `transform: booleanAttribute`.
+
+**Resource / RxJS** (`ticket-store.ts`, `ticket-detail.ts`, `quick-search.ts`)
+- `value()` **rzuca wyjątek** w stanie błędu, także z `defaultValue`. Store sprawdza
+  `hasValue()`, a test to potwierdza.
+- Resource służy do odczytu. POST/PATCH to komendy przez HttpClient. `undefined` w URL daje
+  stan idle. `isLoading` jest prawdą także przy `reload()`.
+- `catchError` musi być wewnątrz `switchMap`. `toSignal` subskrybuje od razu, a
+  `toObservable` emituje asynchronicznie tylko ostatnią wartość. switch/concat/exhaust/mergeMap
+  i kiedy który.
+
+**Signal Forms** (`ticket-form.ts`, `new-ticket.ts`)
+- W trakcie async walidacji `pending()` jest prawdą, a `valid()` i `invalid()` są **oba**
+  fałszem. Wcześniej „Next” nic nie robił, teraz jest wyłączony.
+- Lista dynamiczna: elementy jako **obiekty**. Przy `string[]` stan pola (touched, błędy)
+  zostaje przy indeksie i po usunięciu wiersza „przeskakuje” na inny. Test to pokazuje.
+- `[formField]="form.x"` (pole), a nie `form.x()` (stan). Nie mieszaj z `[value]` ani
+  `ngModel`.
+- Model musi mieć wartość dla każdego pola. Pola `hidden/disabled/readonly` są pomijane w
+  walidacji, ale **zostają w `value()`**.
+- Async walidacja rusza dopiero, gdy przejdą reguły synchroniczne. `when` przełącza jedną
+  regułę, a `applyWhen` cały pod-schemat. Błędy mogą wskazywać inne pole (`fieldTree`).
+  `reset()`.
+
+**Routing / @defer / szablony**
+- Kolejność tras (`new` przed `:id`). Guard `canDeactivate` pyta przed porzuceniem kreatora
+  (`form().dirty()`). Snippety: `canMatch`, `redirectTo` jako funkcja, `resolve` kontra
+  resource, `withViewTransitions`.
+- `@defer` wydziela tylko zależności używane wyłącznie w bloku. Na serwerze renderuje się
+  `@placeholder`, chyba że jest `hydrate`. Przy `on viewport` placeholder musi mieć jeden
+  korzeń.
+- `@for`: `track` po stabilnym id, a nie `$index` ani obiekcie.
+- SSR: `localStorage` w inicjalizatorze sygnału daje NG0500 (komentarz w `ticket-list.ts`).
+
+### Nie ma w kodzie (wspomnij słownie)
+
+Content projection z treścią domyślną w `<ng-content>` (v18), `provideAppInitializer` (v19),
+HMR szablonów (v19), selektor-less i inne eksperymenty po v22, migracje do
+modernizacji starszych aplikacji: `ng generate @angular/core:<nazwa>`, gdzie nazwa to
+`standalone-migration`, `control-flow-migration`, `inject-migration`, `signal-input-migration`,
+`signal-queries-migration`, `output-migration`, `route-lazy-loading-migration`,
+`service-migration` lub zbiorcze `signals`.
+
 ## Testy
 
 `npm test` – po jednym celowanym teście na temat:
 
 - `tickets.routes.spec.ts` – kolejność tras,
-- `ticket-list.spec.ts` – computed, linkedSignal, optymistyczny PATCH,
+- `ticket-list.spec.ts` – computed, linkedSignal (także: strona nie skacze po zmianie ticketu),
+  optymistyczny PATCH,
 - `quick-search.spec.ts` – debounce, anulowanie (`req.cancelled`), przeżycie błędu 500,
-- `new-ticket/ticket-form.spec.ts` – reguły Signal Forms bez renderowania komponentu,
-- `ticket-store.spec.ts` – selektory i rollback po błędzie.
+- `new-ticket/ticket-form.spec.ts` – reguły Signal Forms bez renderowania komponentu, stan pól
+  tablicy podąża za obiektem,
+- `ticket-store.spec.ts` – selektory, rollback po błędzie, brak wyjątku w stanie błędu.
