@@ -20,7 +20,7 @@ export const routes: Routes = [
     loadComponent: () => import('./features/tickets/ticket-detail').then((m) => m.TicketDetail),
   },
   {
-    // Placeholder only; the real Signal Forms form arrives in Task 07.
+    // Task 07: new-ticket form, lazy. A nested Signal Forms `form()` tree.
     path: 'tickets/new',
     loadComponent: () => import('./features/tickets/new-ticket').then((m) => m.NewTicket),
   },
