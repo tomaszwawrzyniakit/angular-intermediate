@@ -1,7 +1,13 @@
-import { Ticket } from './ticket';
+import { Router, json } from 'express';
 
-/** Local data for the first screens (module 2). Module 3 moves it to the REST API. */
-export const MOCK_TICKETS: Ticket[] = [
+import { Ticket } from '../app/features/tickets/ticket';
+
+/**
+ * A tiny in-memory REST API for the training (lives in the SSR Express server).
+ * Real HTTP: every call is visible in DevTools → Network, including cancelled ones.
+ * Data resets when the server restarts.
+ */
+const tickets: Ticket[] = [
   {
     id: 1,
     title: 'Payment gateway timeouts in production',
@@ -89,3 +95,45 @@ export const MOCK_TICKETS: Ticket[] = [
     assignee: 'Tomasz Nowak',
   },
 ];
+
+/** Simulated network latency, long enough to watch loading states and request cancellation. */
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export const ticketApi = Router();
+ticketApi.use(json());
+
+// GET /api/tickets?q=pay   (q=boom simulates a server error, for the error-handling demo)
+ticketApi.get('/tickets', async (req, res) => {
+  const q = String(req.query['q'] ?? '')
+    .trim()
+    .toLowerCase();
+  await delay(q ? 600 : 300);
+  if (q === 'boom') {
+    res.status(500).json({ message: 'Search index is down' });
+    return;
+  }
+  res.json(tickets.filter((t) => t.title.toLowerCase().includes(q)));
+});
+
+ticketApi.get('/tickets/:id', async (req, res) => {
+  await delay(300);
+  const ticket = tickets.find((t) => t.id === Number(req.params.id));
+  if (ticket) {
+    res.json(ticket);
+  } else {
+    res.status(404).json({ message: `Ticket ${req.params.id} not found` });
+  }
+});
+
+// PATCH /api/tickets/3  { "status": "done" } or { "assignee": "Anna Wiśniewska" }
+ticketApi.patch('/tickets/:id', async (req, res) => {
+  await delay(300);
+  const ticket = tickets.find((t) => t.id === Number(req.params.id));
+  if (!ticket) {
+    res.status(404).json({ message: `Ticket ${req.params.id} not found` });
+    return;
+  }
+  const { status, assignee } = req.body as Partial<Ticket>;
+  Object.assign(ticket, status ? { status } : {}, assignee !== undefined ? { assignee } : {});
+  res.json(ticket);
+});

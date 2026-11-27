@@ -1,3 +1,4 @@
+import { httpResource } from '@angular/common/http';
 import {
   afterNextRender,
   Component,
@@ -11,8 +12,8 @@ import {
   viewChild,
 } from '@angular/core';
 
-import { MOCK_TICKETS } from './mock-tickets';
 import { Ticket, TicketStatus } from './ticket';
+import { TicketApi } from './ticket-api';
 import { TicketRow } from './ticket-row';
 import { StatusFilter, StatusFilterValue } from './status-filter';
 
@@ -43,17 +44,38 @@ const NEXT_STATUS: Record<TicketStatus, TicketStatus> = {
       <app-status-filter [(value)]="status" />
     </div>
 
-    <div class="list-group mb-3">
-      @for (ticket of pageTickets(); track ticket.id) {
-        <app-ticket-row [ticket]="ticket" (advance)="advance($event)" />
-      } @empty {
-        <div class="list-group-item text-center text-body-secondary py-5">
-          <i class="bi bi-inbox fs-1 d-block"></i>
-          No tickets match the filters.
-          <button type="button" class="btn btn-link" (click)="clearFilters()">Clear filters</button>
-        </div>
-      }
-    </div>
+    @if (tickets.error()) {
+      <div class="alert alert-danger d-flex align-items-center gap-3" role="alert">
+        <i class="bi bi-exclamation-octagon"></i> Could not load tickets.
+        <button
+          type="button"
+          class="btn btn-sm btn-outline-danger ms-auto"
+          (click)="tickets.reload()"
+        >
+          Retry
+        </button>
+      </div>
+    } @else if (tickets.isLoading() && !tickets.hasValue()) {
+      <div class="list-group mb-3 placeholder-glow" aria-busy="true">
+        @for (i of [1, 2, 3, 4, 5]; track i) {
+          <div class="list-group-item"><span class="placeholder col-8"></span></div>
+        }
+      </div>
+    } @else {
+      <div class="list-group mb-3">
+        @for (ticket of pageTickets(); track ticket.id) {
+          <app-ticket-row [ticket]="ticket" (advance)="advance($event)" />
+        } @empty {
+          <div class="list-group-item text-center text-body-secondary py-5">
+            <i class="bi bi-inbox fs-1 d-block"></i>
+            No tickets match the filters.
+            <button type="button" class="btn btn-link" (click)="clearFilters()">
+              Clear filters
+            </button>
+          </div>
+        }
+      </div>
+    }
 
     @if (pageCount() > 1) {
       <nav aria-label="Ticket pages">
@@ -71,8 +93,13 @@ const NEXT_STATUS: Record<TicketStatus, TicketStatus> = {
 export default class TicketList {
   private readonly injector = inject(Injector);
 
-  // signal(): local, writable state. Module 2 keeps the data in the component ("local state first").
-  protected readonly tickets = signal<Ticket[]>(MOCK_TICKETS);
+  private readonly api = inject(TicketApi);
+
+  // httpResource(): a GET as a signal-based resource → value(), isLoading(), error(), reload().
+  // The value is writable, which makes optimistic updates easy (see advance()).
+  protected readonly tickets = httpResource<Ticket[]>(() => '/api/tickets', { defaultValue: [] });
+
+  // signal(): local UI state ("local state first").
   protected readonly query = signal('');
   protected readonly status = signal<StatusFilterValue>('all');
 
@@ -80,9 +107,11 @@ export default class TicketList {
   protected readonly filtered = computed(() => {
     const q = this.query().trim().toLowerCase();
     const status = this.status();
-    return this.tickets().filter(
-      (t) => (status === 'all' || t.status === status) && t.title.toLowerCase().includes(q),
-    );
+    return this.tickets
+      .value()
+      .filter(
+        (t) => (status === 'all' || t.status === status) && t.title.toLowerCase().includes(q),
+      );
   });
 
   // linkedSignal(): writable (the user clicks a page) BUT reset to 1 whenever the filtered list
@@ -133,7 +162,11 @@ export default class TicketList {
 
   protected advance(ticket: Ticket): void {
     const status = NEXT_STATUS[ticket.status];
-    this.tickets.update((list) => list.map((t) => (t.id === ticket.id ? { ...t, status } : t)));
+    // Optimistic update: change the UI now, then tell the server; on error re-fetch the truth.
+    this.tickets.value.update((list) =>
+      list.map((t) => (t.id === ticket.id ? { ...t, status } : t)),
+    );
+    this.api.update(ticket.id, { status }).subscribe({ error: () => this.tickets.reload() });
   }
 
   protected clearFilters(): void {
