@@ -16,8 +16,9 @@
 }
 
 // Dark ops-console theme.
-// NOTE: Bootstrap `text-bg-*` badges render WHITE text, so every semantic
-// color below is chosen dark enough for white text to meet WCAG AA (>= 4.5:1).
+// NOTE: danger/success/primary/secondary are dark enough for the default
+// WHITE badge text; warning and info are bright so that `text-dark` badges
+// meet WCAG AA (>= 4.5:1) on them.
 html[data-bs-theme='dark'] {
   --bs-body-bg: var(--ops-bg);
   --bs-body-color: #dbe4f0;
@@ -42,16 +43,16 @@ html[data-bs-theme='dark'] {
   --bs-danger-rgb: 153, 27, 27;
   --bs-danger-bg-subtle: rgba(248, 113, 113, 0.15);
 
-  --bs-warning: #854d0e;
-  --bs-warning-rgb: 133, 77, 14;
+  --bs-warning: #f59e0b; // bright amber, used with text-dark (AA on it)
+  --bs-warning-rgb: 245, 158, 11;
   --bs-warning-bg-subtle: rgba(251, 191, 36, 0.15);
 
   --bs-success: #166534;
   --bs-success-rgb: 22, 101, 52;
   --bs-success-bg-subtle: rgba(74, 222, 128, 0.15);
 
-  --bs-info: #075985;
-  --bs-info-rgb: 7, 89, 133;
+  --bs-info: #0dcaf0; // bright cyan, used with text-dark (AA on it)
+  --bs-info-rgb: 13, 202, 240;
   --bs-info-bg-subtle: rgba(56, 189, 248, 0.15);
 }
 
@@ -83,9 +84,37 @@ body {
   --bs-list-group-border-color: var(--ops-border);
 }
 
-// Ticket row hover highlight.
-.ticket-row:hover {
-  background-color: var(--ops-surface-2) !important;
+// Ticket rows: keep the link text in the body color, highlight on hover.
+.ticket-row {
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  &:hover {
+    background-color: var(--ops-surface-2) !important;
+  }
+}
+
+// Assignee initials avatar circle.
+.avatar {
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 50%;
+  background: rgba(34, 211, 238, 0.15);
+  color: var(--ops-accent-soft);
+  border: 1px solid var(--ops-border);
+}
+
+// Flex children that must be allowed to shrink so `text-truncate` works.
+.min-w-0 {
+  min-width: 0;
 }
 
 // Navbar brand accent icon.

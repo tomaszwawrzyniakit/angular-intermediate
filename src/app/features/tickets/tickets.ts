@@ -1,54 +1,96 @@
 import { Component } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { Ticket } from '../../domain/ticket';
 import { MOCK_TICKETS } from '../../domain/tickets';
+import { TicketStatus } from './ticket-status';
 
 @Component({
   selector: 'app-tickets',
+  imports: [RouterLink, TicketStatus],
   template: `
     <div class="card border-0 shadow-sm">
-      <div
-        class="card-header bg-transparent d-flex align-items-center justify-content-between gap-2"
-      >
-        <h1 class="h5 mb-0 d-flex align-items-center gap-2">
-          <i class="bi bi-kanban"></i>
+      <div class="card-header bg-transparent d-flex align-items-center gap-2">
+        <i class="bi bi-kanban" aria-hidden="true"></i>
+        <h1 class="h5 mb-0">
           Tickets
-          <span class="badge text-bg-secondary rounded-pill"> {{ tickets.length }} total </span>
+          <span class="badge text-bg-secondary rounded-pill">{{ tickets.length }} total</span>
         </h1>
       </div>
-      <div class="list-group list-group-flush">
+
+      <ul class="list-group list-group-flush">
         @for (ticket of tickets; track ticket.id) {
-          <a
-            class="ticket-row list-group-item list-group-item-action py-3"
-            [routerLink]="['/tickets', ticket.id]"
-          >
-            <div class="d-flex w-100 align-items-center gap-3">
+          @let assigned = ticket.assignee !== undefined;
+
+          <li class="ticket-row list-group-item list-group-item-action py-3">
+            <a
+              class="d-flex flex-wrap align-items-center gap-3 text-decoration-none"
+              [routerLink]="['/tickets', ticket.id]"
+            >
               <span class="ticket-id text-secondary small">#{{ ticket.id }}</span>
-              <span class="flex-grow-1 text-truncate">{{ ticket.title }}</span>
-              <span class="badge text-bg-{{ priorityColor[ticket.priority] }}">
-                {{ ticket.priority }}
-              </span>
-              <span class="badge text-bg-{{ statusColor[ticket.status] }}">
-                {{ ticket.status }}
-              </span>
-              <span class="assignee text-secondary small text-truncate">
-                @if (ticket.assignee) {
-                  <i class="bi bi-person me-1"></i>{{ ticket.assignee }}
-                } @else {
-                  unassigned
+
+              <div class="flex-grow-1 min-w-0">
+                <div class="fw-semibold text-truncate">{{ ticket.title }}</div>
+                <div class="text-secondary small text-truncate d-none d-md-block">
+                  {{ ticket.description }}
+                </div>
+              </div>
+
+              @switch (ticket.priority) {
+                @case ('high') {
+                  <span class="badge bg-danger rounded-pill">high</span>
                 }
-              </span>
-            </div>
-          </a>
+                @case ('medium') {
+                  <span class="badge bg-warning text-dark rounded-pill">medium</span>
+                }
+                @case ('low') {
+                  <span class="badge bg-success rounded-pill">low</span>
+                }
+                @default never;
+              }
+
+              <app-ticket-status [status]="ticket.status" />
+
+              @if (assigned) {
+                <span class="assignee d-flex align-items-center gap-2 min-w-0">
+                  <span class="avatar" aria-hidden="true">{{
+                    initials(ticket.assignee ?? '')
+                  }}</span>
+                  <span class="small text-truncate">{{ ticket.assignee }}</span>
+                </span>
+              } @else {
+                <span class="assignee text-secondary small d-flex align-items-center gap-2">
+                  <i class="bi bi-person-dash" aria-hidden="true"></i>
+                  Unassigned
+                </span>
+              }
+            </a>
+          </li>
+        } @empty {
+          <li class="list-group-item text-center py-5">
+            <i
+              class="bi bi-inbox d-block mx-auto mb-3"
+              style="font-size: 2.5rem"
+              aria-hidden="true"
+            ></i>
+            <p class="text-secondary mb-3">No tickets yet. Create the first one to get started.</p>
+            <a class="btn btn-primary btn-sm" [routerLink]="['/tickets/new']">
+              <i class="bi bi-plus-circle me-2" aria-hidden="true"></i>New ticket
+            </a>
+          </li>
         }
-      </div>
+      </ul>
     </div>
   `,
-  imports: [RouterLink],
 })
 export class Tickets {
-  readonly tickets = MOCK_TICKETS;
+  readonly tickets: Ticket[] = MOCK_TICKETS;
 
-  // Maps domain values to Bootstrap semantic color tokens.
-  readonly priorityColor = { high: 'danger', medium: 'warning', low: 'secondary' } as const;
-  readonly statusColor = { new: 'info', progress: 'primary', done: 'success' } as const;
+  /** Initials for the assignee avatar, e.g. "Marta Kowalska" -> "MK". */
+  initials(name: string): string {
+    return name
+      .split(' ')
+      .map((part) => part.charAt(0))
+      .join('')
+      .toUpperCase();
+  }
 }
